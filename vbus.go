@@ -72,7 +72,10 @@ func Open(id string) (*Hand, error) {
 
 	// check if we already have a vbus config file
 	log.Printf("check if we already have a vbus config file\n")
-	rootfolder := os.Getenv("HOME")
+	rootfolder := os.Getenv("VBUS_PATH")
+	if rootfolder == "" {
+		rootfolder = os.Getenv("HOME")
+	}
 	os.MkdirAll(rootfolder+"/vbus", os.ModePerm)
 	_, err := os.Stat(rootfolder + "/vbus/" + id + ".conf")
 	if err != nil {
