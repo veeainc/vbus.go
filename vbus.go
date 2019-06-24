@@ -75,9 +75,10 @@ func Open(id string) (*Hand, error) {
 	rootfolder := os.Getenv("VBUS_PATH")
 	if rootfolder == "" {
 		rootfolder = os.Getenv("HOME")
+		rootfolder = rootfolder + "/vbus/"
 	}
-	os.MkdirAll(rootfolder+"/vbus", os.ModePerm)
-	_, err := os.Stat(rootfolder + "/vbus/" + id + ".conf")
+	os.MkdirAll(rootfolder, os.ModePerm)
+	_, err := os.Stat(rootfolder + id + ".conf")
 	if err != nil {
 		log.Printf("create new configuration file for " + id + "\n")
 		v.element = gabs.New()
@@ -98,7 +99,7 @@ func Open(id string) (*Hand, error) {
 		log.Printf(v.element.StringIndent("", " "))
 	} else {
 		log.Printf("load existing configuration file for " + id + "\n")
-		file, _ := ioutil.ReadFile(rootfolder + "/vbus/" + id + ".conf")
+		file, _ := ioutil.ReadFile(rootfolder + id + ".conf")
 		v.element, _ = gabs.ParseJSON([]byte(file))
 		log.Printf(v.element.StringIndent("", " "))
 	}
@@ -194,7 +195,7 @@ func Open(id string) (*Hand, error) {
 	}
 
 	v.element.Set(vbus_url, "vbus", "url")
-	ioutil.WriteFile(rootfolder+"/vbus/"+id+".conf", v.element.Bytes(), 0666)
+	ioutil.WriteFile(rootfolder+id+".conf", v.element.Bytes(), 0666)
 
 	// connect to vbus server
 	directconnect := true
