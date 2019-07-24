@@ -76,6 +76,10 @@ func Open(id string) (*Hand, error) {
 	if rootfolder == "" {
 		rootfolder = os.Getenv("HOME")
 		rootfolder = rootfolder + "/vbus/"
+	} else {
+		if strings.HasSuffix(rootfolder, "/") == false {
+			rootfolder = rootfolder + "/"
+		}
 	}
 	os.MkdirAll(rootfolder, os.ModePerm)
 	_, err := os.Stat(rootfolder + id + ".conf")
