@@ -98,6 +98,8 @@ func Open(id string) (*Hand, error) {
 		v.element.Set(string(publickey), "auth", "password")
 		v.element.Array("auth", "permissions", "subscribe")
 		v.element.Array("auth", "permissions", "publish")
+		v.element.ArrayAppend(id+".>", "auth", "permissions", "subscribe")
+		v.element.ArrayAppend(id+".>", "auth", "permissions", "publish")
 		v.element.Set(string(privatekey), "key", "private")
 
 		log.Printf(v.element.StringIndent("", " "))
