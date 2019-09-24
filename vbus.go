@@ -102,7 +102,7 @@ func Open(id string) (*Hand, error) {
 	log.Println("hostname: " + hostname)
 
 	os.MkdirAll(rootfolder, os.ModePerm)
-	_, err := os.Stat(rootfolder + id + ".conf")
+	_, err = os.Stat(rootfolder + id + ".conf")
 	if err != nil {
 		log.Printf("create new configuration file for " + id + "\n")
 		v.element = gabs.New()
