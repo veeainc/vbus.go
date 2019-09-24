@@ -14,6 +14,7 @@ import (
 	"time"
 
 	gabs "github.com/Jeffail/gabs"
+	"github.com/godbus/dbus"
 	"github.com/grandcat/zeroconf"
 	"github.com/nats-io/nats.go"
 	"golang.org/x/crypto/bcrypt"
@@ -81,6 +82,25 @@ func Open(id string) (*Hand, error) {
 			rootfolder = rootfolder + "/"
 		}
 	}
+
+	// create user name
+	hostname, _ := os.Hostname()
+
+	dbusconn, err := dbus.SystemBus()
+	if err != nil {
+		log.Println(err)
+		panic(err)
+	} else {
+		obj := dbusconn.Object("io.veea.VeeaHub.Info", "/io/veea/VeeaHub/Info")
+		call := obj.Call("io.veea.VeeaHub.Info.Hostname", 0)
+		if call.Err != nil {
+			log.Println(os.Stderr, "Failed to get hostname:", err)
+			panic(err)
+		}
+		call.Store(&hostname)
+	}
+	log.Println("hostname: " + hostname)
+
 	os.MkdirAll(rootfolder, os.ModePerm)
 	_, err := os.Stat(rootfolder + id + ".conf")
 	if err != nil {
@@ -89,7 +109,6 @@ func Open(id string) (*Hand, error) {
 		//create user
 		v.element.Set(id, "element", "path")
 		v.element.Set(id, "element", "name")
-		hostname, _ := os.Hostname()
 		v.element.Set(hostname, "element", "host")
 		v.element.Set(hostname+"."+id, "element", "uuid")
 		privatekey := genPassword()
