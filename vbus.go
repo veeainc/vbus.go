@@ -1,8 +1,6 @@
 package vbus
 
 import (
-	//    "fl
-	//"errors"
 	"context"
 	"crypto/rand"
 	"io/ioutil"
@@ -14,7 +12,6 @@ import (
 	"time"
 
 	gabs "github.com/Jeffail/gabs"
-	"github.com/godbus/dbus"
 	"github.com/grandcat/zeroconf"
 	"github.com/nats-io/nats.go"
 	"golang.org/x/crypto/bcrypt"
@@ -86,20 +83,10 @@ func Open(id string) (*Hand, error) {
 	}
 
 	// create user name
-	hostname, _ := os.Hostname()
-
-	dbusconn, err := dbus.SystemBus()
+	hostname, err := getHostname()
 	if err != nil {
 		log.Println(err)
 		panic(err)
-	} else {
-		obj := dbusconn.Object("io.veea.VeeaHub.Info", "/io/veea/VeeaHub/Info")
-		call := obj.Call("io.veea.VeeaHub.Info.Hostname", 0)
-		if call.Err != nil {
-			log.Println(os.Stderr, "Failed to get hostname:", err)
-			panic(err)
-		}
-		call.Store(&hostname)
 	}
 	log.Println("hostname: " + hostname)
 	v.Hostname = hostname
