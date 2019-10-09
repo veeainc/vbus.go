@@ -26,6 +26,8 @@ type substruct struct {
 }
 
 type Hand struct {
+	Hostname string
+
 	nc      *nats.Conn
 	element *gabs.Container
 	sublist []substruct
@@ -100,6 +102,7 @@ func Open(id string) (*Hand, error) {
 		call.Store(&hostname)
 	}
 	log.Println("hostname: " + hostname)
+	v.Hostname = hostname
 
 	os.MkdirAll(rootfolder, os.ModePerm)
 	_, err = os.Stat(rootfolder + id + ".conf")
