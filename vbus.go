@@ -126,7 +126,8 @@ func Open(id string) (*Node, error) {
 	log.Printf("vbus config path: " + rootfolder + "\n")
 
 	// create user name
-	hostname, _ := os.Hostname()
+	hostnameLocal, _ := os.Hostname()
+	hostname := strings.Split(hostnameLocal, ".")[0]
 
 	isVeeaHub := false
 	dbusconn, err := dbus.SystemBus()
