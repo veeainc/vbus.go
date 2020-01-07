@@ -1,10 +1,11 @@
-package main
+package thingsboard
 
 import (
 	//    "fl
 	//"errors"
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -334,7 +335,7 @@ func (v *Node) dbAccess(m *nats.Msg) {
 	if strings.HasPrefix(v.base, m.Subject) {
 		fullNode := v.Full()
 		log.Printf("Request to get " + m.Subject)
-		if fullNode.CheckNode(m.Subject) == true {
+		if fullNode.IsNode(m.Subject) == true {
 			tmpNode, err := fullNode.Node(m.Subject)
 			if err != nil {
 				log.Printf("Error in get node: %v\n", err)
@@ -351,7 +352,7 @@ func (v *Node) dbAccess(m *nats.Msg) {
 		default:
 			log.Printf("cmd: " + m.Subject)
 			path = m.Subject
-			if v.CheckNode(path) == true {
+			if v.IsNode(path) == true {
 				tmpNode, err := v.Node(path)
 				if err != nil {
 					log.Printf("Error in get node: %v\n", err)
@@ -362,23 +363,18 @@ func (v *Node) dbAccess(m *nats.Msg) {
 				tmpAtt, err := v.Attribute(path)
 				if err != nil {
 					log.Printf("Error in get attribute: %v\n", err)
-					switch tmpAtt.atype {
-					default:
-						log.Printf("Error in get attribute: type not supported\n")
-					case "boolean":
-						m.Respond([]byte(strconv.FormatBool(tmpAtt.value.(bool))))
-					case "integer":
-						m.Respond([]byte(strconv.Itoa(tmpAtt.value.(int))))
-					case "string":
-						m.Respond([]byte(tmpAtt.value.(string)))
-					case "number":
-						m.Respond([]byte(strconv.FormatFloat(float64(tmpAtt.value.(float32)), 'b', -1, 32)))
+				} else {
+					msg, err := json.Marshal(tmpAtt.value)
+					if err != nil {
+						log.Printf("Error in get attribute: %v\n", err)
+					} else {
+						m.Respond(msg)
 					}
 				}
 			}
 		case "add":
 			log.Printf("add: " + string(m.Data) + " to " + path)
-			if v.CheckNode(path) == true {
+			if v.IsNode(path) == true {
 				tmpNode, err := v.Node(path)
 				if err != nil {
 					log.Printf("Error in get node: %v\n", err)
@@ -398,7 +394,7 @@ func (v *Node) dbAccess(m *nats.Msg) {
 			if stringInSlice(path, subListSet) == true {
 				log.Printf("not processed here")
 			} else {
-				if v.CheckNode(path) == true {
+				if v.IsNode(path) == true {
 					tmpNode, err := v.Node(path)
 					if err != nil {
 						log.Printf("Error in get node: %v\n", err)
@@ -410,17 +406,11 @@ func (v *Node) dbAccess(m *nats.Msg) {
 					if err != nil {
 						log.Printf("Error in get attribute: %v\n", err)
 					} else {
-						switch tmpAtt.atype {
-						default:
-							log.Printf("Error in get attribute: type not supported\n")
-						case "boolean":
-							m.Respond([]byte(strconv.FormatBool(tmpAtt.value.(bool))))
-						case "integer":
-							m.Respond([]byte(strconv.Itoa(tmpAtt.value.(int))))
-						case "string":
-							m.Respond([]byte(tmpAtt.value.(string)))
-						case "number":
-							m.Respond([]byte(strconv.FormatFloat(float64(tmpAtt.value.(float32)), 'b', -1, 32)))
+						msg, err := json.Marshal(tmpAtt.value)
+						if err != nil {
+							log.Printf("Error in get attribute: %v\n", err)
+						} else {
+							m.Respond(msg)
 						}
 					}
 				}
@@ -428,7 +418,22 @@ func (v *Node) dbAccess(m *nats.Msg) {
 		case "set":
 			log.Printf("set cmd: " + path + " - not supported yet")
 		case "remove":
-			log.Printf("remove cmd: " + path + " - not supported yet")
+			if v.IsNode(path) == true {
+
+				cut := strings.LastIndex(path, ".")
+				if cut < 0 {
+					log.Printf("cannot get Parent\n")
+					m.Respond([]byte("cannot get Parent"))
+				}
+				tmpNode, err := v.Node(v.base[:cut])
+				if err != nil {
+					log.Printf("Error in get node: %v\n", err)
+				} else {
+					tmpNode.element.Delete(v.base[cut+1:])
+				}
+			} else {
+				log.Printf("node not existing")
+			}
 		}
 	}
 }
@@ -452,6 +457,21 @@ func (v *Node) Tree() string {
 	return ""
 }
 
+// Map returns the node subtree list
+func (v *Node) Map() map[string]*Node {
+	m := make(map[string]*Node)
+	for key, child := range v.element.ChildrenMap() {
+		if v.Type(key) == "object" {
+			node := &(Node{})
+			node.nc = v.nc
+			node.element = child
+			node.base = v.base + "." + key
+			m[key] = node
+		}
+	}
+	return m
+}
+
 // Full returns the full tree contained by the node
 func (v *Node) Full() *Node {
 	node := &(Node{})
@@ -463,14 +483,85 @@ func (v *Node) Full() *Node {
 	return node
 }
 
-// CheckNode returns true if path is a node
-func (v *Node) CheckNode(subpath string) bool {
+// Type returns the attribute type (string)
+func (a *Attribute) Type() string {
+	return getAttributeType(a.value)
+}
+
+// Type returns the pointed element type (string)
+func (v *Node) Type(subpath string) string {
+	if subpath == "" {
+		return getAttributeType(v.element.Data())
+	}
+
+	if !v.element.ExistsP(subpath) {
+		return ""
+	}
+
+	return getAttributeType(v.element.Path(subpath).Data())
+}
+
+// IsNode returns true if path is a node
+func (v *Node) IsNode(subpath string) bool {
 	// is element contains a schema, this is a node
 	if subpath == "" {
 		// node root always exist
 		return true
 	}
 	return v.element.ExistsP(subpath) // + ".schema.type")
+}
+
+// IsAttribute returns true if path is an attribute
+func (v *Node) IsAttribute(subpath string) bool {
+	// is element contains a schema, this is a node
+	if subpath == "" {
+		// node cannot be attribute
+		return false
+	}
+	//pathType := v.element.Path("schema.properties." + subpath + ".type").Data().(string)
+	elemType := v.Type(subpath)
+	if (elemType != "object") && (elemType != "") {
+		return true
+	}
+
+	return false
+}
+
+// Parent returns the node's parent
+func (v *Node) Parent() (*Node, error) {
+	cut := strings.LastIndex(v.base, ".")
+
+	if cut < 0 {
+		return nil, errors.New("cannot get Parent")
+	}
+	node := &(Node{})
+	node.nc = v.nc
+	node.base = v.base[:cut]
+	node.element = gabs.New()
+	err := node.Get()
+	if err != nil {
+		return nil, err
+	}
+
+	return node, nil
+}
+
+func (a *Attribute) String() string {
+	value := ""
+	switch a.atype {
+	default:
+		log.Printf("Error in get attribute: type not supported\n")
+	case "boolean":
+		value = strconv.FormatBool(a.value.(bool))
+	case "integer":
+		value = strconv.Itoa(a.value.(int))
+	case "string":
+		value = a.value.(string)
+	case "number":
+		value = strconv.FormatFloat(float64(a.value.(float32)), 'b', -1, 32)
+	}
+
+	return value
 }
 
 // Node returns the sub node requested
@@ -614,6 +705,10 @@ func (v *Node) Discover(path string, filters string, timeout time.Duration) (*No
 }
 
 func getAttributeType(value interface{}) string {
+
+	if _, ok := value.(map[string]interface{}); ok {
+		return "object"
+	}
 	switch value.(type) {
 	default:
 		return ""
@@ -735,13 +830,19 @@ func (a *Attribute) Set(value interface{}) error {
 
 	a.parent.Set(value, a.key)
 
-	a.nc.Publish(a.path+".set", []byte(fmt.Sprintf("%v", value.(interface{}))))
+	msg, err := json.Marshal(value)
+
+	if err != nil {
+		return err
+	}
+
+	a.nc.Publish(a.path+".set", msg)
 
 	return nil
 }
 
-// Set update the method on vbus
-func (m *Method) Set(msg []byte) error {
+// Call update the method on vbus
+func (m *Method) Call(msg []byte) error {
 	m.nc.Publish(m.base+".set", msg)
 	return nil
 }
@@ -765,18 +866,7 @@ func (a *Attribute) Get() (interface{}, error) {
 		return nil, err
 	}
 
-	switch a.atype {
-	default:
-		return nil, errors.New("type not supported")
-	case "boolean":
-		a.value, err = strconv.ParseBool(string(msg.Data))
-	case "integer":
-		a.value, err = strconv.ParseInt(string(msg.Data), 10, 32)
-	case "string":
-		a.value = string(msg.Data)
-	case "number":
-		a.value, err = strconv.ParseFloat(string(msg.Data), 32)
-	}
+	err = json.Unmarshal(msg.Data, a.value)
 
 	if err != nil {
 		return nil, err
@@ -785,6 +875,15 @@ func (a *Attribute) Get() (interface{}, error) {
 	a.parent.Set(a.value, a.key)
 
 	return a.value, nil
+}
+
+// Remove remove the node on vbus
+func (v *Node) Remove() error {
+	_, err := v.nc.Request(v.base+".remove", []byte(""), time.Second)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // SubscribeAdd subscribe to get call for that node
@@ -803,7 +902,9 @@ func (v *Node) SubscribeAdd(cb NodeCallback) error {
 		} else {
 			v.element.Merge(newNode)
 			//v.element.SetP("object", "schema.properties."+subnodes[0]+".type")
-			cb(string(m.Data))
+			for key := range newNode.ChildrenMap() {
+				cb(key)
+			}
 		}
 	})
 
@@ -856,6 +957,27 @@ func (v *Node) SubscribeSet(cb NodeCallback) error {
 	return err
 }
 
+// SubscribeRemove subscribe to all sub-node removal
+func (v *Node) SubscribeRemove(cb NodeCallback) error {
+
+	if v.sub != nil {
+		return errors.New("callback already existing for this Node")
+	}
+
+	var err error
+	v.sub, err = v.nc.Subscribe(v.base+".remove", func(m *nats.Msg) {
+		fmt.Printf("Received a message: %s\n", string(m.Data))
+		answer := cb(string(m.Data))
+		if answer != "" {
+			m.Respond([]byte(answer))
+		}
+	})
+
+	subListGet = append(subListGet, v.base+".remove")
+
+	return err
+}
+
 // SubscribeAdd subscribe to get call for that attribute
 // func (a *Attribute) SubscribeAdd(cb AttributeCallback) error {
 
@@ -902,7 +1024,10 @@ func (a *Attribute) SubscribeGet(cb AttributeCallback) error {
 
 		answer := cb(m.Data)
 		if answer != nil {
-			m.Respond([]byte(fmt.Sprintf("%v", answer.(interface{}))))
+			msg, err := json.Marshal(answer)
+			if err == nil {
+				m.Respond(msg)
+			}
 		}
 	})
 
@@ -922,18 +1047,7 @@ func (a *Attribute) SubscribeSet(cb AttributeCallback) error {
 	a.sub, err = a.nc.Subscribe(a.path+".set", func(m *nats.Msg) {
 		fmt.Printf("Received a message: %s\n", string(m.Data))
 
-		switch a.atype {
-		default:
-			log.Printf("type not supported")
-		case "boolean":
-			a.value, err = strconv.ParseBool(string(m.Data))
-		case "integer":
-			a.value, err = strconv.ParseInt(string(m.Data), 10, 32)
-		case "string":
-			a.value = string(m.Data)
-		case "number":
-			a.value, err = strconv.ParseFloat(string(m.Data), 32)
-		}
+		err := json.Unmarshal(m.Data, a.value)
 
 		if err == nil {
 			a.parent.Set(a.value, a.key)
