@@ -1,4 +1,4 @@
-package thingsboard
+package vBus
 
 import (
 	//    "fl
@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Jeffail/gabs/v2"
-	//"github.com/Jeffail/gabs"
+	//"github.com/Jeffail/gabs/v2"
+	"github.com/Jeffail/gabs"
 	"github.com/godbus/dbus"
 	"github.com/grandcat/zeroconf"
 	"github.com/nats-io/nats.go"
@@ -54,13 +54,13 @@ type MethodCallback func([]byte) []byte
 
 // Attribute is the generic attribute of a vbus tree
 type Attribute struct {
-	nc     *nats.Conn
-	value  interface{}
-	path   string
-	key    string
-	atype  string
-	parent *gabs.Container
-	sub    *nats.Subscription
+	nc      *nats.Conn
+	value   interface{}
+	path    string
+	key     string
+	atype   string
+	element *gabs.Container
+	sub     *nats.Subscription
 }
 
 // AttributeCallback prototype for Attribute Subscribe callback function
@@ -290,7 +290,6 @@ func Open(id string) (*Node, error) {
 	// create base element tree
 	// only a base "object" type described by it's empty schema
 	v.element = gabs.New()
-	v.element.SetP("object", "schema.type")
 	v.base = uuid
 
 	// connect to vbus server
@@ -313,7 +312,7 @@ func Open(id string) (*Node, error) {
 		v.nc.Publish("system.authorization."+hostname+".add", localConfig.Search("client").Bytes())
 
 		v.nc.Close()
-		time.Sleep(1000 * time.Millisecond)
+		time.Sleep(5000 * time.Millisecond)
 		v.nc, err = nats.Connect(vbusURL, nats.UserInfo(uuid, localConfig.Search("key", "private").Data().(string)))
 		if err != nil {
 			log.Fatalf("Can't connect: %v\n", err)
@@ -461,13 +460,14 @@ func (v *Node) Tree() string {
 func (v *Node) Map() map[string]*Node {
 	m := make(map[string]*Node)
 	for key, child := range v.element.ChildrenMap() {
-		if v.Type(key) == "object" {
-			node := &(Node{})
-			node.nc = v.nc
-			node.element = child
-			node.base = v.base + "." + key
-			m[key] = node
-		}
+		//if v.Type(key) == "object" {
+		//if !child.ExistsP("schema") {
+		node := &(Node{})
+		node.nc = v.nc
+		node.element = child
+		node.base = v.base + "." + key
+		m[key] = node
+		//}
 	}
 	return m
 }
@@ -519,8 +519,9 @@ func (v *Node) IsAttribute(subpath string) bool {
 		return false
 	}
 	//pathType := v.element.Path("schema.properties." + subpath + ".type").Data().(string)
-	elemType := v.Type(subpath)
-	if (elemType != "object") && (elemType != "") {
+	//elemType := v.Type(subpath)
+	//if (elemType != "object") && (elemType != "") {
+	if v.element.ExistsP(subpath + ".schema") {
 		return true
 	}
 
@@ -546,6 +547,17 @@ func (v *Node) Parent() (*Node, error) {
 	return node, nil
 }
 
+// Path return the attribute full path
+func (a *Attribute) Path() string {
+	return a.path + "." + a.key
+}
+
+// Value return the attribute value
+func (a *Attribute) Value() interface{} {
+	return a.value
+}
+
+// Value return the attribute value in String
 func (a *Attribute) String() string {
 	value := ""
 	switch a.atype {
@@ -595,10 +607,10 @@ func (v *Node) Attribute(path string) (*Attribute, error) {
 	if v.element.ExistsP(path) == false {
 		log.Printf("path not already existing, try to get it")
 		// if we don't have any information about this attribute, first, get it's node
-		nodePath := path[:strings.LastIndex(path, ".")]
-		nodeKey := path[strings.LastIndex(path, "."):]
-		nodeKey = strings.TrimPrefix(nodeKey, ".")
-		tmpNode, err := v.Node(nodePath)
+		//nodePath := path[:strings.LastIndex(path, ".")]
+		//nodeKey := path[strings.LastIndex(path, "."):]
+		//nodeKey = strings.TrimPrefix(nodeKey, ".")
+		tmpNode, err := v.Node(path)
 		if err != nil {
 			return nil, errors.New("cannot retrieve Attribute Node" + err.Error())
 		}
@@ -607,7 +619,7 @@ func (v *Node) Attribute(path string) (*Attribute, error) {
 			return nil, errors.New("cannot get Attribute Node: " + err.Error())
 		}
 		log.Printf(tmpNode.Tree())
-		return tmpNode.Attribute(nodeKey)
+		return tmpNode.Attribute("")
 	}
 
 	parent := v.base
@@ -616,32 +628,29 @@ func (v *Node) Attribute(path string) (*Attribute, error) {
 		parent = path[:ind]
 		attr.key = path[ind:]
 		attr.path = v.base + parent
-		if v.element.ExistsP(parent+".schema.properties."+attr.key+".type") == false {
-			return nil, errors.New("not an attribute")
-		}
-		attr.atype = v.element.Path(parent + ".schema.properties." + attr.key + ".type").Data().(string)
-		attr.parent = v.element.Path(parent)
+
 	} else {
 		attr.key = path
 		attr.path = v.base
-		if v.element.ExistsP("schema.properties."+attr.key+".type") == false {
-			return nil, errors.New("not an attribute")
-		}
-		attr.atype = v.element.Path("schema.properties." + attr.key + ".type").Data().(string)
-		attr.parent = v.element.Path(parent)
 	}
+
+	if v.element.ExistsP(path+".schema") == false {
+		return nil, errors.New("doesn't have a schema: not an attribute")
+	}
+	attr.atype = v.element.Path(path + ".schema.type").Data().(string)
+	attr.element = v.element.Path(path)
 
 	switch attr.atype {
 	default:
 		return nil, errors.New("type not supported")
 	case "boolean":
-		attr.value = v.element.Path(attr.key).Data()
+		attr.value = v.element.Path(attr.key + ".value").Data()
 	case "integer":
-		attr.value = v.element.Path(attr.key).Data()
+		attr.value = v.element.Path(attr.key + ".value").Data()
 	case "string":
-		attr.value = v.element.Path(attr.key).Data()
+		attr.value = v.element.Path(attr.key + ".value").Data()
 	case "number":
-		attr.value = v.element.Path(attr.key).Data()
+		attr.value = v.element.Path(attr.key + ".value").Data()
 	}
 
 	return attr, nil
@@ -733,17 +742,8 @@ func (v *Node) AddAttribute(path string, value interface{}) error {
 	}
 
 	elementJSON := gabs.New()
-	elementJSON.SetP(value, path)
-	//v.element.Merge(elementJSON)
-
-	ind := strings.LastIndex(path, ".")
-	if ind > 0 {
-		parent := path[:ind]
-		attributename := path[ind:]
-		elementJSON.SetP(attributeType, parent+".schema.properties."+attributename+".type")
-	} else {
-		elementJSON.SetP(attributeType, "schema.properties."+path+".type")
-	}
+	elementJSON.SetP(value, path+".value")
+	elementJSON.SetP(attributeType, path+".schema.type")
 
 	v.nc.Publish(v.base+".add", elementJSON.Bytes())
 
@@ -759,11 +759,6 @@ func (v *Node) AddNode(path string, nodejson string) error {
 
 	elementJSON := gabs.New()
 	elementJSON.SetP(newNode, path)
-	elementJSON.SetP("object", path+".schema.type")
-	//v.element.Merge(elementJSON)
-
-	//subnodes := strings.Split(path, ".")
-	//v.element.SetP("object", "schema.properties."+subnodes[0]+".type")
 
 	v.nc.Publish(v.base+".add", elementJSON.Bytes())
 
@@ -828,7 +823,7 @@ func (a *Attribute) Set(value interface{}) error {
 		return errors.New("value type incompatibility: " + a.atype + " expected")
 	}
 
-	a.parent.Set(value, a.key)
+	a.element.Set(value, "value")
 
 	msg, err := json.Marshal(value)
 
@@ -872,7 +867,7 @@ func (a *Attribute) Get() (interface{}, error) {
 		return nil, err
 	}
 
-	a.parent.Set(a.value, a.key)
+	a.element.Set(a.value, "value")
 
 	return a.value, nil
 }
@@ -1050,7 +1045,7 @@ func (a *Attribute) SubscribeSet(cb AttributeCallback) error {
 		err := json.Unmarshal(m.Data, a.value)
 
 		if err == nil {
-			a.parent.Set(a.value, a.key)
+			a.element.Set(a.value, "value")
 			cb(a.value)
 		}
 	})
@@ -1069,6 +1064,7 @@ func (v *Node) Permission(permission string) error {
 	for _, child := range children {
 		if child.Data().(string) == permission {
 			exist = true
+			log.Printf("permission already existing")
 		}
 	}
 
@@ -1077,10 +1073,10 @@ func (v *Node) Permission(permission string) error {
 		localConfig.ArrayAppend(permission, "client", "permissions", "publish")
 		log.Printf("request permission for: " + permission)
 
-		msg, err := v.nc.Request("system.authorization."+localConfig.S("vbus", "hostname").Data().(string)+"."+localConfig.S("client", "user").Data().(string)+".permissions.set", localConfig.Path("client.permissions").Bytes(), time.Second)
+		msg, err := v.nc.Request("system.authorization."+localConfig.S("vbus", "hostname").Data().(string)+"."+localConfig.S("client", "user").Data().(string)+".permissions.set", localConfig.Path("client.permissions").Bytes(), 5*time.Second)
 
 		if err != nil {
-			return errors.New("fail to request permission")
+			return errors.New("fail to request permission: " + err.Error())
 		}
 
 		value, err := strconv.ParseBool(string(msg.Data))
@@ -1091,11 +1087,9 @@ func (v *Node) Permission(permission string) error {
 			return errors.New("permission denied")
 		}
 
-		time.Sleep(1000 * time.Millisecond)
+		time.Sleep(5 * time.Second)
 
 		ioutil.WriteFile(localConfig.S("client", "user").Data().(string)+".conf", localConfig.Bytes(), 0666)
-	} else {
-		return errors.New("permission " + permission + " already added")
 	}
 
 	return nil
