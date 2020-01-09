@@ -393,25 +393,12 @@ func (v *Node) dbAccess(m *nats.Msg) {
 			if stringInSlice(path, subListSet) == true {
 				log.Printf("not processed here")
 			} else {
-				if v.IsNode(path) == true {
-					tmpNode, err := v.Node(path)
-					if err != nil {
-						log.Printf("Error in get node: %v\n", err)
-					} else {
-						m.Respond([]byte(tmpNode.Tree()))
-					}
+
+				msg, err := json.Marshal(v.element.Path(path).Data())
+				if err != nil {
+					log.Printf("Error in get attribute: %v\n", err)
 				} else {
-					tmpAtt, err := v.Attribute(path)
-					if err != nil {
-						log.Printf("Error in get attribute: %v\n", err)
-					} else {
-						msg, err := json.Marshal(tmpAtt.value)
-						if err != nil {
-							log.Printf("Error in get attribute: %v\n", err)
-						} else {
-							m.Respond(msg)
-						}
-					}
+					m.Respond(msg)
 				}
 			}
 		case "set":
@@ -596,6 +583,43 @@ func (v *Node) Node(subpath string) (*Node, error) {
 	return node, nil
 }
 
+// NodeToAttribute convert a node in Attribute if possible
+func (v *Node) NodeToAttribute() (*Attribute, error) {
+	attr := &(Attribute{})
+	attr.nc = v.nc
+
+	if v.element.Exists("schema") == false {
+		return nil, errors.New("doesn't have a schema: not an attribute")
+	}
+
+	attr.atype = v.element.Path("schema.type").Data().(string)
+	attr.element = v.element
+
+	ind := strings.LastIndex(v.base, ".")
+	if ind > 0 {
+		attr.path = v.base[:ind]
+		attr.key = v.base[ind+1:]
+	} else {
+		attr.key = v.base
+		attr.path = ""
+	}
+
+	switch attr.atype {
+	default:
+		return nil, errors.New("type not supported")
+	case "boolean":
+		attr.value = v.element.Path("value").Data()
+	case "integer":
+		attr.value = v.element.Path("value").Data()
+	case "string":
+		attr.value = v.element.Path("value").Data()
+	case "number":
+		attr.value = v.element.Path("value").Data()
+	}
+
+	return attr, nil
+}
+
 // Attribute returns the sub node requested
 func (v *Node) Attribute(path string) (*Attribute, error) {
 	attr := &(Attribute{})
@@ -619,14 +643,13 @@ func (v *Node) Attribute(path string) (*Attribute, error) {
 			return nil, errors.New("cannot get Attribute Node: " + err.Error())
 		}
 		log.Printf(tmpNode.Tree())
-		return tmpNode.Attribute("")
+		return tmpNode.NodeToAttribute()
 	}
 
-	parent := v.base
 	ind := strings.LastIndex(path, ".")
 	if ind > 0 {
-		parent = path[:ind]
-		attr.key = path[ind:]
+		parent := path[:ind]
+		attr.key = path[ind+1:]
 		attr.path = v.base + parent
 
 	} else {
@@ -831,7 +854,7 @@ func (a *Attribute) Set(value interface{}) error {
 		return err
 	}
 
-	a.nc.Publish(a.path+".set", msg)
+	a.nc.Publish(a.path+".value.set", msg)
 
 	return nil
 }
@@ -855,7 +878,7 @@ func (v *Node) Get() error {
 
 // Get request the node info on vbus
 func (a *Attribute) Get() (interface{}, error) {
-	msg, err := a.nc.Request(a.path+"."+a.key+".get", []byte(""), 100*time.Millisecond)
+	msg, err := a.nc.Request(a.path+"."+a.key+".value.get", []byte(""), 100*time.Millisecond)
 
 	if err != nil {
 		return nil, err
@@ -1014,7 +1037,7 @@ func (a *Attribute) SubscribeGet(cb AttributeCallback) error {
 	}
 
 	var err error
-	a.sub, err = a.nc.Subscribe(a.path+".get", func(m *nats.Msg) {
+	a.sub, err = a.nc.Subscribe(a.path+".value.get", func(m *nats.Msg) {
 		fmt.Printf("Received a message: %s\n", string(m.Data))
 
 		answer := cb(m.Data)
@@ -1026,7 +1049,7 @@ func (a *Attribute) SubscribeGet(cb AttributeCallback) error {
 		}
 	})
 
-	subListGet = append(subListGet, a.path+".get")
+	subListGet = append(subListGet, a.path+".value.get")
 
 	return err
 }
@@ -1039,7 +1062,7 @@ func (a *Attribute) SubscribeSet(cb AttributeCallback) error {
 	}
 
 	var err error
-	a.sub, err = a.nc.Subscribe(a.path+".set", func(m *nats.Msg) {
+	a.sub, err = a.nc.Subscribe(a.path+".value.set", func(m *nats.Msg) {
 		fmt.Printf("Received a message: %s\n", string(m.Data))
 
 		err := json.Unmarshal(m.Data, a.value)
@@ -1050,7 +1073,7 @@ func (a *Attribute) SubscribeSet(cb AttributeCallback) error {
 		}
 	})
 
-	subListSet = append(subListSet, a.path+".set")
+	subListSet = append(subListSet, a.path+".value.set")
 
 	return err
 }
