@@ -16,8 +16,7 @@ import (
 	"strings"
 	"time"
 
-	//"github.com/Jeffail/gabs/v2"
-	"github.com/Jeffail/gabs"
+	"github.com/Jeffail/gabs/v2"
 	"github.com/godbus/dbus"
 	"github.com/grandcat/zeroconf"
 	"github.com/nats-io/nats.go"
