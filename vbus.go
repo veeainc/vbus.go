@@ -110,6 +110,12 @@ func testvBusURL(url string) bool {
 
 // Open - Create a new connection to vbus.
 func Open(id string) (*Node, error) {
+	privatekey := genPassword()
+	return OpenWithPassword(id, privatekey)
+}
+
+// OpenWithPassword - Create a new connection to vbus,  with password specified.
+func OpenWithPassword(id string, pwd string) (*Node, error) {
 	// create vbus element struct
 	v := &(Node{})
 
@@ -158,8 +164,7 @@ func Open(id string) (*Node, error) {
 		log.Printf("configuration file creation\n")
 
 		// create auth tree
-		privatekey := genPassword()
-		publickey, _ := bcrypt.GenerateFromPassword([]byte(privatekey), DefaultCost)
+		publickey, _ := bcrypt.GenerateFromPassword([]byte(pwd), DefaultCost)
 		localConfig.Set(uuid, "client", "user")
 		localConfig.Set(string(publickey), "client", "password")
 		localConfig.Array("client", "permissions", "subscribe")
@@ -168,7 +173,7 @@ func Open(id string) (*Node, error) {
 		localConfig.ArrayAppend(id, "client", "permissions", "subscribe")
 		localConfig.ArrayAppend(id+".>", "client", "permissions", "publish")
 		localConfig.ArrayAppend(id, "client", "permissions", "publish")
-		localConfig.Set(string(privatekey), "key", "private")
+		localConfig.Set(string(pwd), "key", "private")
 
 		// create private tree
 
@@ -325,6 +330,12 @@ func Open(id string) (*Node, error) {
 	v.nc.Subscribe(id, v.dbAccess)
 
 	return v, nil
+}
+
+// GetvBusIP provide vBus IP
+func (v *Node) GetvBusIP() string {
+	fullIP := localConfig.Search("vbus", "url").Data().(string)
+	return strings.TrimPrefix(fullIP, "nats://")
 }
 
 func (v *Node) dbAccess(m *nats.Msg) {
