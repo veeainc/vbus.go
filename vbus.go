@@ -864,7 +864,7 @@ func (a *Attribute) Set(value interface{}) error {
 		return err
 	}
 
-	a.nc.Publish(a.path+".value.set", msg)
+	a.nc.Publish(a.path+"."+a.key+".value.set", msg)
 
 	return nil
 }
@@ -888,13 +888,13 @@ func (v *Node) Get() error {
 
 // Get request the node info on vbus
 func (a *Attribute) Get() (interface{}, error) {
-	msg, err := a.nc.Request(a.path+"."+a.key+".value.get", []byte(""), 100*time.Millisecond)
+	msg, err := a.nc.Request(a.path+"."+a.key+".value.get", []byte(""), 30*time.Second)
 
 	if err != nil {
 		return nil, err
 	}
 
-	err = json.Unmarshal(msg.Data, a.value)
+	err = json.Unmarshal(msg.Data, &a.value)
 
 	if err != nil {
 		return nil, err
@@ -1047,7 +1047,7 @@ func (a *Attribute) SubscribeGet(cb AttributeCallback) error {
 	}
 
 	var err error
-	a.sub, err = a.nc.Subscribe(a.path+".value.get", func(m *nats.Msg) {
+	a.sub, err = a.nc.Subscribe(a.path+"."+a.key+".value.get", func(m *nats.Msg) {
 		fmt.Printf("Received a message: %s\n", string(m.Data))
 
 		answer := cb(m.Data)
@@ -1072,10 +1072,10 @@ func (a *Attribute) SubscribeSet(cb AttributeCallback) error {
 	}
 
 	var err error
-	a.sub, err = a.nc.Subscribe(a.path+".value.set", func(m *nats.Msg) {
+	a.sub, err = a.nc.Subscribe(a.path+"."+a.key+".value.set", func(m *nats.Msg) {
 		fmt.Printf("Received a message: %s\n", string(m.Data))
 
-		err := json.Unmarshal(m.Data, a.value)
+		err := json.Unmarshal(m.Data, &a.value)
 
 		if err == nil {
 			a.element.Set(a.value, "value")
