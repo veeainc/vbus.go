@@ -141,6 +141,7 @@ func OpenWithPassword(id string, pwd string) (*Node, error) {
 	// create user name
 	hostnameLocal, _ := os.Hostname()
 	hostname := strings.Split(hostnameLocal, ".")[0]
+	hostIP := ""
 
 	isVeeaHub := false
 	dbusconn, err := dbus.SystemBus()
@@ -275,10 +276,15 @@ func OpenWithPassword(id string, pwd string) (*Node, error) {
 				log.Printf("url from discovery ok: " + routesStr + "\n")
 				if isVeeaHub == false {
 					// try to retrieve real VH hostname case we are not on a VH
-					hostParsed := strings.Split(firstservice.Text[0], "=")
-					if hostParsed[0] == "hostname" {
-						hostname = hostParsed[1]
+					hostnameParsed := strings.Split(firstservice.Text[1], "=")
+					if hostnameParsed[0] == "hostname" {
+						hostname = hostnameParsed[1]
 						log.Printf("hostname retrived from mDns: " + hostname)
+					}
+					hostIPParsed := strings.Split(firstservice.Text[0], "=")
+					if hostIPParsed[0] == "host" {
+						hostIP = hostIPParsed[1]
+						log.Printf("hostIP retrived from mDns: " + hostIP)
 					}
 				}
 			} else {
@@ -292,6 +298,7 @@ func OpenWithPassword(id string, pwd string) (*Node, error) {
 	// record config file
 	localConfig.Set(vbusURL, "vbus", "url")
 	localConfig.Set(hostname, "vbus", "hostname")
+	localConfig.Set(hostIP, "vbus", "hostIP")
 	ioutil.WriteFile(uuid+".conf", localConfig.Bytes(), 0666)
 
 	if vbusURL == "" {
@@ -344,6 +351,12 @@ func OpenWithPassword(id string, pwd string) (*Node, error) {
 func (v *Node) GetvBusIP() string {
 	fullIP := localConfig.Search("vbus", "url").Data().(string)
 	return strings.TrimPrefix(fullIP, "nats://")
+}
+
+// GethostIP provide host IP
+func (v *Node) GethostIP() string {
+	fullIP := localConfig.Search("vbus", "hostIP").Data().(string)
+	return fullIP
 }
 
 func (v *Node) dbAccess(m *nats.Msg) {
