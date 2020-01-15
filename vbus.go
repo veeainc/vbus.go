@@ -29,6 +29,11 @@ var subListGet []string
 var subListSet []string
 var subListRemove []string
 
+// Errors
+var (
+	ErrvBusNoServers = errors.New("vBus: no servers available for connection")
+)
+
 // Node is the generic element of a vbus tree
 type Node struct {
 	nc      *nats.Conn
@@ -104,6 +109,8 @@ func testvBusURL(url string) bool {
 	if err == nil {
 		vbusTest = true
 		tmp.Close()
+	} else {
+		log.Printf("error vBus url: " + url + "\n" + err.Error())
 	}
 	return vbusTest
 }
@@ -283,13 +290,14 @@ func OpenWithPassword(id string, pwd string) (*Node, error) {
 	}
 
 	// record config file
-	if vbusURL == "" {
-		panic("no valid url vbus found")
-	}
-
 	localConfig.Set(vbusURL, "vbus", "url")
 	localConfig.Set(hostname, "vbus", "hostname")
 	ioutil.WriteFile(uuid+".conf", localConfig.Bytes(), 0666)
+
+	if vbusURL == "" {
+		log.Printf("no valid url vbus found")
+		return nil, ErrvBusNoServers
+	}
 
 	// create base element tree
 	// only a base "object" type described by it's empty schema
