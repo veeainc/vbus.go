@@ -274,17 +274,17 @@ func OpenWithPassword(id string, pwd string) (*Node, error) {
 			if testvBusURL(routesStr) == true {
 				vbusURL = routesStr
 				log.Printf("url from discovery ok: " + routesStr + "\n")
+				hostIPParsed := strings.Split(firstservice.Text[0], "=")
+				if hostIPParsed[0] == "host" {
+					hostIP = hostIPParsed[1]
+					log.Printf("hostIP retrived from mDns: " + hostIP)
+				}
 				if isVeeaHub == false {
 					// try to retrieve real VH hostname case we are not on a VH
 					hostnameParsed := strings.Split(firstservice.Text[1], "=")
 					if hostnameParsed[0] == "hostname" {
 						hostname = hostnameParsed[1]
 						log.Printf("hostname retrived from mDns: " + hostname)
-					}
-					hostIPParsed := strings.Split(firstservice.Text[0], "=")
-					if hostIPParsed[0] == "host" {
-						hostIP = hostIPParsed[1]
-						log.Printf("hostIP retrived from mDns: " + hostIP)
 					}
 				}
 			} else {
