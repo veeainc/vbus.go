@@ -353,12 +353,6 @@ func (v *Node) GetvBusIP() string {
 	return strings.TrimPrefix(fullIP, "nats://")
 }
 
-// GethostIP provide host IP
-func (v *Node) GethostIP() string {
-	fullIP := localConfig.Search("vbus", "hostIP").Data().(string)
-	return fullIP
-}
-
 func (v *Node) dbAccess(m *nats.Msg) {
 
 	// first track generic discovery
