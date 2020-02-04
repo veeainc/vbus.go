@@ -38,7 +38,10 @@ func toVbus(obj interface{}) []byte {
 	enc := json.NewEncoder(buf)
 	enc.SetEscapeHTML(false)
 	_ = enc.Encode(obj)
-	return buf.Bytes()
+	// compact json
+	compacted := new(bytes.Buffer)
+	_ = json.Compact(compacted, buf.Bytes())
+	return compacted.Bytes()
 }
 
 func fromVbus(data []byte) (interface{}, error) {
