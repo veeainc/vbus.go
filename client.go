@@ -1,8 +1,9 @@
 package vBus
 
+// The Vbus client. Library entry point.
 type Client struct {
 	*NodeManager
-
+	//
 	nats *ExtendedNatsClient
 }
 
@@ -10,7 +11,7 @@ type Client struct {
 func NewClient(domain, appId string, options ...NatsOption) *Client {
 	nats := NewExtendedNatsClient(domain, appId, options...)
 	return &Client{
-		nats: nats,
+		nats:        nats,
 		NodeManager: NewNodeManager(nats),
 	}
 }

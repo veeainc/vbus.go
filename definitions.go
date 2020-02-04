@@ -9,25 +9,19 @@ import (
 	"reflect"
 )
 
-type Definition interface {
+type iDefinition interface {
 	// Search for a path in this definition.
-	// It can returns a Definition or none if not found.
-	SearchPath(parts []string) Definition
+	// It can returns a iDefinition or none if not found.
+	searchPath(parts []string) iDefinition
 
 	// Tells how to handle a set request from Vbus.
-	HandleSet(data interface{}, parts []string) (interface{}, error)
+	handleSet(data interface{}, parts []string) (interface{}, error)
 
 	// Tells how to handle a set request from Vbus.
-	HandleGet(data interface{}, parts []string) (interface{}, error)
+	handleGet(data interface{}, parts []string) (interface{}, error)
 
 	// Get the Vbus representation.
 	ToRepr() JsonObj
-
-	// only supported on NodeDef
-	AddChild(uuid string, node Definition)
-
-	// only supported on NodeDef
-	RemoveChild(uuid string) Definition
 }
 
 // Tells if a raw node is an attribute.
@@ -45,8 +39,8 @@ func isNode(node *interface{}) bool {
 	return !isAttribute(node) && !isMethod(node)
 }
 
-type SetCallback = func(data interface{}, segment ...string)
-type GetCallback = func(data interface{}, segment ...string)
+type SetCallback = func(data interface{}, segment []string)
+type GetCallback = func(data interface{}, segment []string)
 
 // Advanced Nats methods options
 type DefOptions struct {
@@ -55,21 +49,21 @@ type DefOptions struct {
 }
 
 // Option is a function on the options for a connection.
-type DefOption func(*DefOptions)
+type defOption func(*DefOptions)
 
-func OnGet(g GetCallback) DefOption {
+func OnGet(g GetCallback) defOption {
 	return func(o *DefOptions) {
 		o.OnGet = g
 	}
 }
 
-func OnSet(g SetCallback) DefOption {
+func OnSet(g SetCallback) defOption {
 	return func(o *DefOptions) {
 		o.OnSet = g
 	}
 }
 // Retrieve all options to a struct
-func getDefOptions(advOpts ...DefOption) DefOptions {
+func getDefOptions(advOpts ...defOption) DefOptions {
 	// set default options
 	opts := DefOptions{
 		OnGet: nil,
@@ -80,9 +74,9 @@ func getDefOptions(advOpts ...DefOption) DefOptions {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Error Definition
+// Error iDefinition
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-type ErrorDefinition struct { // implements Definition
+type ErrorDefinition struct { // implements iDefinition
 	code    int
 	message string
 	detail  string
@@ -105,19 +99,19 @@ func NewErrorDefinitionWithDetail(code int, message string, detail string) *Erro
 	}
 }
 
-func (e *ErrorDefinition) SearchPath(parts []string) Definition {
+func (e *ErrorDefinition) searchPath(parts []string) iDefinition {
 	if len(parts) <= 0 {
 		return e
 	}
 	return nil
 }
 
-func (e *ErrorDefinition) HandleSet(data interface{}, parts []string) (interface{}, error) {
+func (e *ErrorDefinition) handleSet(data interface{}, parts []string) (interface{}, error) {
 	log.Trace("not implemented")
 	return nil, nil
 }
 
-func (e *ErrorDefinition) HandleGet(data interface{}, parts []string) (interface{}, error) {
+func (e *ErrorDefinition) handleGet(data interface{}, parts []string) (interface{}, error) {
 	return e.ToRepr(), nil
 }
 
@@ -136,14 +130,6 @@ func (e *ErrorDefinition) ToRepr() JsonObj {
 	}
 }
 
-func (e *ErrorDefinition) AddChild(uuid string, node Definition) {
-	panic("Cannot add a child node on an error def")
-}
-
-func (e *ErrorDefinition) RemoveChild(uuid string) Definition {
-	panic("Cannot remove a child node on an error def")
-}
-
 func NewPathNotFoundError() *ErrorDefinition {
 	return NewErrorDefinition(404, "not found")
 }
@@ -157,11 +143,11 @@ func NewInternalError(err error) *ErrorDefinition {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Method Definition
+// Method iDefinition
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // A Method definition.
 // It holds a user callback.
-type MethodDef struct { // implements Definition
+type MethodDef struct { // implements iDefinition
 	method        MethodDefCallback
 	name          string
 	paramsSchema  JsonObj
@@ -229,14 +215,14 @@ func (md *MethodDef) inspectMethod() {
 	}
 }
 
-func (md *MethodDef) SearchPath(parts []string) Definition {
+func (md *MethodDef) searchPath(parts []string) iDefinition {
 	if len(parts) <= 0 {
 		return md
 	}
 	return nil
 }
 
-func (md *MethodDef) HandleSet(args interface{}, parts []string) (interface{}, error) {
+func (md *MethodDef) handleSet(args interface{}, parts []string) (interface{}, error) {
 	if isSlice(args) {
 		slice := args.([]interface{}) // to slice
 		return invokeFunc(md.method, append(slice, parts)...)
@@ -246,7 +232,7 @@ func (md *MethodDef) HandleSet(args interface{}, parts []string) (interface{}, e
 	}
 }
 
-func (md *MethodDef) HandleGet(data interface{}, parts []string) (interface{}, error) {
+func (md *MethodDef) handleGet(data interface{}, parts []string) (interface{}, error) {
 	return md.ToRepr(), nil
 }
 
@@ -261,18 +247,11 @@ func (md *MethodDef) ToRepr() JsonObj {
 	}
 }
 
-func (md *MethodDef) AddChild(uuid string, node Definition) {
-	panic("Cannot add a child node on a method")
-}
-
-func (md *MethodDef) RemoveChild(uuid string) Definition {
-	panic("Cannot remove a child node on a method")
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Attribute Definition
+// Attribute iDefinition
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-type AttributeDef struct { // implements Definition
+
+type AttributeDef struct { // implements iDefinition
 	uuid   string
 	value  interface{}
 	schema interface{}
@@ -280,7 +259,7 @@ type AttributeDef struct { // implements Definition
 	onGet  GetCallback
 }
 
-func NewAttributeDef(uuid string, value interface{}, options ...DefOption) *AttributeDef {
+func NewAttributeDef(uuid string, value interface{}, options ...defOption) *AttributeDef {
 	opts := getDefOptions(options...)
 	if value == nil {
 		log.Warnf("%s is null, no json schema can be inferred, use NewAttributeDefWithSchema", uuid)
@@ -306,7 +285,7 @@ func NewAttributeDefWithSchema(uuid string, value interface{}, schema map[string
 		onGet:  onGet}
 }
 
-func (a *AttributeDef) SearchPath(parts []string) Definition {
+func (a *AttributeDef) searchPath(parts []string) iDefinition {
 	if len(parts) <= 0 {
 		return a
 	} else if sliceEqual(parts, []string{"value"}) {
@@ -315,18 +294,25 @@ func (a *AttributeDef) SearchPath(parts []string) Definition {
 	return nil
 }
 
-func (a *AttributeDef) HandleSet(data interface{}, parts []string) (interface{}, error) {
+func (a *AttributeDef) handleSet(data interface{}, parts []string) (interface{}, error) {
 	if a.onSet != nil {
 		return invokeFunc(a.onSet, data, parts)
 	}
+	log.Debugf("no set handler attached to %s", a.uuid)
 	return nil, nil
 }
 
-func (a *AttributeDef) HandleGet(data interface{}, parts []string) (interface{}, error) {
-	if a.onGet != nil {
-		return invokeFunc(a.onGet, data, parts)
+func (a *AttributeDef) handleGet(data interface{}, parts []string) (interface{}, error) {
+	if lastString(parts) == "value" { // request on value
+		if a.onGet != nil {
+			return invokeFunc(a.onGet, data, parts)
+		} else {
+			log.Debugf("no get handler attached to %s, returning cache", a.uuid)
+			return a.value, nil
+		}
+	} else { // request on definition
+		return a.ToRepr(), nil
 	}
-	return nil, nil
 }
 
 func (a *AttributeDef) ToRepr() JsonObj {
@@ -342,28 +328,21 @@ func (a *AttributeDef) ToRepr() JsonObj {
 	}
 }
 
-func (a *AttributeDef) AddChild(uuid string, node Definition) {
-	panic("Cannot add a child node on a attribute")
-}
-
-func (a *AttributeDef) RemoveChild(uuid string) Definition {
-	panic("Cannot remove a child node on a attribute")
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Node Definition
+// Node iDefinition
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 type RawNode = map[string]interface{}
-type NodeStruct = map[string]Definition
+type NodeStruct = map[string]iDefinition
 
 // A node definition.
 // It holds a user structure (Python object) and optional callbacks.
-type NodeDef struct { // implements Definition
+type NodeDef struct { // implements iDefinition
 	structure NodeStruct
 	onSet SetCallback
 }
 
-func NewNodeDef(rawNode RawNode, option ...DefOption) *NodeDef {
+func NewNodeDef(rawNode RawNode, option ...defOption) *NodeDef {
 	opts := getDefOptions(option...)
 	return &NodeDef{
 		structure: initializeStructure(rawNode),
@@ -371,23 +350,23 @@ func NewNodeDef(rawNode RawNode, option ...DefOption) *NodeDef {
 	}
 }
 
-func (nd *NodeDef) SearchPath(parts []string) Definition {
+func (nd *NodeDef) searchPath(parts []string) iDefinition {
 	if len(parts) <= 0 {
 		return nd
 	} else if v, ok := nd.structure[parts[0]]; ok {
-		return v.SearchPath(parts[1:])
+		return v.searchPath(parts[1:])
 	}
 	return nil
 }
 
-func (nd *NodeDef) HandleSet(data interface{}, parts []string) (interface{}, error) {
+func (nd *NodeDef) handleSet(data interface{}, parts []string) (interface{}, error) {
 	if nd.onSet != nil {
 		return invokeFunc(nd.onSet, data, parts)
 	}
 	return nil, nil
 }
 
-func (nd *NodeDef) HandleGet(data interface{}, parts []string) (interface{}, error) {
+func (nd *NodeDef) handleGet(data interface{}, parts []string) (interface{}, error) {
 	panic("implement me")
 }
 
@@ -407,7 +386,7 @@ func initializeStructure(rawNode RawNode) NodeStruct {
 	for k, v := range rawNode {
 		if isMap(v) {	// if its a map
 			structure[k] = NewNodeDef(v.(RawNode))
-		} else if d, ok := v.(Definition); ok { // if its already a definition
+		} else if d, ok := v.(iDefinition); ok { // if its already a definition
 			structure[k] = d
 		} else {
 			structure[k] = NewAttributeDef(k, v)
@@ -416,11 +395,12 @@ func initializeStructure(rawNode RawNode) NodeStruct {
 	return structure
 }
 
-func (nd *NodeDef) AddChild(uuid string, node Definition) {
+
+func (nd *NodeDef) AddChild(uuid string, node iDefinition) {
 	nd.structure[uuid] = node
 }
 
-func (nd *NodeDef) RemoveChild(uuid string) Definition {
+func (nd *NodeDef) RemoveChild(uuid string) iDefinition {
 	if v, ok := nd.structure[uuid]; ok {
 		delete(nd.structure, uuid)
 		return v

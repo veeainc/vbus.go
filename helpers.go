@@ -196,7 +196,7 @@ func testVbusUrl(url string) bool {
 	if url == "" {
 		return false
 	}
-	conn, err := nats.Connect(url, nats.UserInfo(AnonymousUser, AnonymousUser))
+	conn, err := nats.Connect(url, nats.UserInfo(anonymousUser, anonymousUser))
 	if err == nil {
 		defer conn.Close()
 		return true

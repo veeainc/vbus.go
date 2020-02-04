@@ -17,11 +17,11 @@ import (
 )
 
 const (
-	EnvHome       = "HOME"
-	EnvVbusPath   = "VBUS_PATH"
-	EnvVbusUrl    = "VBUS_URL"
-	AnonymousUser = "anonymous"
-	DefaultCost   = 11
+	envHome       = "HOME"
+	envVbusPath   = "VBUS_PATH"
+	envVbusUrl    = "VBUS_URL"
+	anonymousUser = "anonymous"
+	defaultCost   = 11
 )
 
 type ExtendedNatsClient struct {
@@ -74,11 +74,11 @@ func NewExtendedNatsClient(appDomain, appId string, options ...NatsOption) *Exte
 		client.remoteHostname = hostname
 	}
 
-	client.rootFolder = client.env[EnvVbusPath]
+	client.rootFolder = client.env[envVbusPath]
 
 	// generate a default location is not specified
 	if client.rootFolder == "" {
-		client.rootFolder = path.Join(client.env[EnvHome], "vbus")
+		client.rootFolder = path.Join(client.env[envHome], "vbus")
 	}
 
 	return client
@@ -86,9 +86,9 @@ func NewExtendedNatsClient(appDomain, appId string, options ...NatsOption) *Exte
 
 func readEnvVar() map[string]string {
 	return map[string]string{
-		EnvHome:     os.Getenv(EnvHome),
-		EnvVbusPath: os.Getenv(EnvVbusPath),
-		EnvVbusUrl:  os.Getenv(EnvVbusUrl),
+		envHome:     os.Getenv(envHome),
+		envVbusPath: os.Getenv(envVbusPath),
+		envVbusUrl:  os.Getenv(envVbusUrl),
 	}
 }
 
@@ -287,7 +287,7 @@ func (c *ExtendedNatsClient) AskPermission(permission string) (bool, error) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Publish on Vbus the user described in configuration.
 func (c *ExtendedNatsClient) publishUser(url string, config *configuration) error {
-	conn, err := nats.Connect(url, nats.UserInfo(AnonymousUser, AnonymousUser))
+	conn, err := nats.Connect(url, nats.UserInfo(anonymousUser, anonymousUser))
 	if err != nil {
 		return errors.Wrap(err, "cannot connect to client server")
 	}
@@ -327,7 +327,7 @@ func (c *ExtendedNatsClient) getFromConfigFile(config *configuration) (url strin
 
 // find vbus server  - strategy 2: get url from ENV:VBUS_URL
 func (c *ExtendedNatsClient) getFromEnv(config *configuration) (url string, newHost string, e error) {
-	return c.env[EnvVbusUrl], "", nil
+	return c.env[envVbusUrl], "", nil
 }
 
 // find vbus server  - strategy 3: try default url client://hostname:21400
@@ -440,7 +440,7 @@ func (c *ExtendedNatsClient) getDefaultConfig() (*configuration, error) {
 		return nil, errors.Wrap(err, "cannot generate password")
 	}
 
-	publicKey, err := bcrypt.GenerateFromPassword([]byte(password), DefaultCost)
+	publicKey, err := bcrypt.GenerateFromPassword([]byte(password), defaultCost)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot generate public key")
 	}

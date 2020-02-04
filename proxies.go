@@ -26,6 +26,7 @@ type ProxySubCallback = func(proxy *UnknownProxy, segments ...string)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Proxy Base Struct
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 // Define actions and data available for all proxy.
 type ProxyBase struct { // implements IProxy
 	client *ExtendedNatsClient
@@ -87,6 +88,7 @@ func (p *ProxyBase) subscribeToEvent(cb ProxySubCallback, event string, parts ..
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Unknown Proxy
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 // When we don't know in advance the object type, we use an UnknownProxy.
 // For example, when we subscribe to a path, the library will return an UnknownProxy.
 // Then you will have to assert it to the correct type using IsAttribute, IsMethod...
@@ -146,6 +148,14 @@ func NewAttributeProxy(client *ExtendedNatsClient, path string, rawNode JsonObj)
 	}
 }
 
+func (ap *AttributeProxy) SetValue(value interface{}) error {
+	return ap.client.Publish(joinPath(ap.GetPath(), notifValueSetted), value, WithoutHost(), WithoutId())
+}
+
+func (ap *AttributeProxy) ReadValue(value interface{}) (interface{}, error) {
+	return ap.client.Request(joinPath(ap.GetPath(), notifValueGet), nil, WithoutHost(), WithoutId())
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Node Proxy
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -168,12 +178,12 @@ func (np *NodeProxy) Tree() JsonObj {
 
 // Subscribe to the add event.
 func (np *NodeProxy) SubscribeAdd(cb ProxySubCallback, parts ...string) error {
-	return np.subscribeToEvent(cb, NotifAdded, parts...)
+	return np.subscribeToEvent(cb, notifAdded, parts...)
 }
 
 // Subscribe to the del event.
 func (np *NodeProxy) SubscribeDel(cb ProxySubCallback, parts ...string) error {
-	return np.subscribeToEvent(cb, NotifRemoved, parts...)
+	return np.subscribeToEvent(cb, notifRemoved, parts...)
 }
 
 // Retrieve a node proxy
@@ -186,7 +196,7 @@ func (np *NodeProxy) GetNode(parts ...string) (*NodeProxy, error) {
 			return NewNodeProxy(np.client, joinPath(prepend(np.GetPath(), parts)...), rawElementDef), nil
 		} else {
 			// load from Vbus
-			resp, err := np.client.Request(joinPath(append(parts, NotifGet)...), nil, WithoutHost(), WithoutId())
+			resp, err := np.client.Request(joinPath(append(parts, notifGet)...), nil, WithoutHost(), WithoutId())
 			if err != nil {
 				return nil, errors.Wrap(err, "cannot retrieve remote node")
 			}
@@ -209,13 +219,36 @@ func (np *NodeProxy) GetMethod(parts ...string) (*MethodProxy, error) {
 			return NewMethodProxy(np.client, joinPath(prepend(np.GetPath(), parts)...), rawElementDef), nil
 		} else {
 			// load from Vbus
-			resp, err := np.client.Request(joinPath(append(parts, NotifGet)...), nil, WithoutHost(), WithoutId(), Timeout(2*time.Second))
+			resp, err := np.client.Request(joinPath(append(parts, notifGet)...), nil, WithoutHost(), WithoutId(), Timeout(2*time.Second))
 			if err != nil {
-				return nil, errors.Wrap(err, "cannot retrieve remote node")
+				return nil, errors.Wrap(err, "cannot retrieve remote method")
 			}
 			// check if its a json object
 			if rawElementDef, ok := resp.(JsonObj); ok {
 				return NewMethodProxy(np.client, joinPath(prepend(np.GetPath(), parts)...), rawElementDef), nil
+			}
+			return nil, errors.New("Retrieved value on Vbus is not a valid json node")
+		}
+	}
+}
+
+// Retrieve a method proxy
+func (np *NodeProxy) GetAttribute(parts ...string) (*AttributeProxy, error) {
+	if isWildcardPath(parts...) {
+		panic("cannot use a wildcard path")
+	} else {
+		rawElementDef := getPathInObj(np.rawNode, parts...)
+		if rawElementDef != nil {
+			return NewAttributeProxy(np.client, joinPath(prepend(np.GetPath(), parts)...), rawElementDef), nil
+		} else {
+			// load from Vbus
+			resp, err := np.client.Request(joinPath(append(parts, notifGet)...), nil, WithoutHost(), WithoutId(), Timeout(2*time.Second))
+			if err != nil {
+				return nil, errors.Wrap(err, "cannot retrieve remote attribute")
+			}
+			// check if its a json object
+			if rawElementDef, ok := resp.(JsonObj); ok {
+				return NewAttributeProxy(np.client, joinPath(prepend(np.GetPath(), parts)...), rawElementDef), nil
 			}
 			return nil, errors.New("Retrieved value on Vbus is not a valid json node")
 		}
@@ -239,10 +272,10 @@ func NewMethodProxy(client *ExtendedNatsClient, path string, methodDef JsonObj) 
 
 // Call this method with some arguments.
 func (mp *MethodProxy) Call(args ...interface{}) (interface{}, error) {
-	return mp.client.Request(joinPath(mp.path, NotifSetted), args, WithoutHost(), WithoutId())
+	return mp.client.Request(joinPath(mp.path, notifSetted), args, WithoutHost(), WithoutId())
 }
 
 // Call this method with some arguments and a timeout.
 func (mp *MethodProxy) CallWithTimeout(timeout time.Duration, args ...interface{}) (interface{}, error) {
-	return mp.client.Request(joinPath(mp.path, NotifSetted), args, Timeout(timeout), WithoutHost(), WithoutId())
+	return mp.client.Request(joinPath(mp.path, notifSetted), args, Timeout(timeout), WithoutHost(), WithoutId())
 }
