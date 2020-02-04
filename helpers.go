@@ -48,7 +48,10 @@ func fromVbus(data []byte) (interface{}, error) {
 	if data != nil {
 		var input interface{}
 		err := json.Unmarshal(data, &input)
-		return input, err
+		if err != nil {
+			return nil, errors.Wrap(err, "invalid json")
+		}
+		return input, nil
 	}
 	return nil, nil
 }

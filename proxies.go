@@ -152,7 +152,7 @@ func (ap *AttributeProxy) SetValue(value interface{}) error {
 	return ap.client.Publish(joinPath(ap.GetPath(), notifValueSetted), value, WithoutHost(), WithoutId())
 }
 
-func (ap *AttributeProxy) ReadValue(value interface{}) (interface{}, error) {
+func (ap *AttributeProxy) ReadValue() (interface{}, error) {
 	return ap.client.Request(joinPath(ap.GetPath(), notifValueGet), nil, WithoutHost(), WithoutId())
 }
 
