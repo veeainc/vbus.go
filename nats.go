@@ -131,7 +131,7 @@ func (c *ExtendedNatsClient) Connect() error {
 
 	// connect with newly created user
 	c.client, err = nats.Connect(url,
-		nats.UserInfo(config.Client.User, config.Client.Password),
+		nats.UserInfo(config.Client.User, config.Key.Private),
 		nats.Name(config.Client.User))
 
 	return err
@@ -310,13 +310,13 @@ func (c *ExtendedNatsClient) publishUser(url string, config *configuration) erro
 func (c *ExtendedNatsClient) getFromHubId(config *configuration) (url string, newHost string, e error) {
 	if ret := net.ParseIP(c.remoteHostname); ret != nil {
 		// already an ip address
-		return fmt.Sprintf("client://%s:21400", c.remoteHostname), "", nil
+		return fmt.Sprintf("nats://%s:21400", c.remoteHostname), "", nil
 	} else {
 		addr, err := net.LookupIP(c.remoteHostname) // resolve hostname
 		if err != nil {
 			return "", "", errors.Wrap(err, "Cannot resolve hostname")
 		}
-		return fmt.Sprintf("client://%v:21400", addr[0]), "", nil
+		return fmt.Sprintf("nats://%v:21400", addr[0]), "", nil
 	}
 }
 
@@ -332,7 +332,7 @@ func (c *ExtendedNatsClient) getFromEnv(config *configuration) (url string, newH
 
 // find vbus server  - strategy 3: try default url client://hostname:21400
 func (c *ExtendedNatsClient) getDefault(config *configuration) (url string, newHost string, e error) {
-	return fmt.Sprintf("client://%s.veeamesh.local:21400", c.hostname), "", nil
+	return fmt.Sprintf("nats://%s.veeamesh.local:21400", c.hostname), "", nil
 }
 
 // find vbus server  - strategy 4: find it using avahi
