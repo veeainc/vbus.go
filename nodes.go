@@ -94,7 +94,6 @@ func (n *Node) AddNode(uuid string, rawNode RawNode, options ...defOption) (*Nod
 }
 
 // Add a child attribute and notify Vbus
-// Returns: self (cannot add sub element to an attribute)
 func (n *Node) AddAttribute(uuid string, value interface{}, options ...defOption) (*Attribute, error) {
 	def := NewAttributeDef(uuid, value, options...) // create the definition
 	node := NewAttribute(n.client, uuid, def, n)    // create the connected nod
@@ -111,15 +110,20 @@ func (n *Node) AddAttribute(uuid string, value interface{}, options ...defOption
 }
 
 // Add a child method node and notify Vbus
-// Returns: self (cannot add sub element to method)
+// The method must be a func(args..., path []string)
+// The last argument is mandatory, it will receive the splited Nats path.
 func (n *Node) AddMethod(uuid string, method MethodDefCallback) (*Method, error) {
-	def := NewMethodDef(method)               // create the definition
+	def, err := NewMethodDef(method)               // create the definition
+	if err != nil {
+		return nil, err
+	}
+
 	node := NewMethod(n.client, uuid, def, n) // create the connected nod
 	n.definition.AddChild(uuid, def)          // add it
 
 	// send the node definition on Vbus
 	packet := JsonObj{uuid: def.ToRepr()}
-	err := n.client.Publish(joinPath(n.GetPath(), notifAdded), packet)
+	err = n.client.Publish(joinPath(n.GetPath(), notifAdded), packet)
 	if err != nil {
 		return node, errors.Wrap(err, "cannot publish new method")
 	}

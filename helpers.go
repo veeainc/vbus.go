@@ -27,11 +27,11 @@ const (
 
 // Represents a Json object
 type JsonObj = map[string]interface{}
+
 // Represents any Json
 type JsonAny = interface{}
 
 var log = logrus.New()
-
 
 func toVbus(obj interface{}) []byte {
 	buf := new(bytes.Buffer)
@@ -238,7 +238,7 @@ func isMap(v interface{}) bool {
 func invokeFunc(fn interface{}, args ...interface{}) (ret interface{}, err error) {
 	// Recover in case of panic
 	defer func() {
-		if r := recover(); r!= nil {
+		if r := recover(); r != nil {
 			err = errors.New(r.(string))
 		}
 	}()
@@ -341,15 +341,6 @@ func getPathInObj(o JsonObj, segments ...string) JsonObj {
 	return root
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
+func isFunc(v interface{}) bool {
+	return reflect.TypeOf(v).Kind() == reflect.Func
+}

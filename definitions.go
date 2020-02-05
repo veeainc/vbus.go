@@ -6,6 +6,7 @@ package vBus
 
 import (
 	"github.com/alecthomas/jsonschema"
+	"github.com/pkg/errors"
 	"reflect"
 )
 
@@ -62,6 +63,7 @@ func OnSet(g SetCallback) defOption {
 		o.OnSet = g
 	}
 }
+
 // Retrieve all options to a struct
 func getDefOptions(advOpts ...defOption) DefOptions {
 	// set default options
@@ -69,12 +71,14 @@ func getDefOptions(advOpts ...defOption) DefOptions {
 		OnGet: nil,
 		OnSet: nil,
 	}
-	for _, opt := range advOpts { opt(&opts) }
+	for _, opt := range advOpts {
+		opt(&opts)
+	}
 	return opts
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Error iDefinition
+// Error Definition
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 type ErrorDefinition struct { // implements iDefinition
 	code    int
@@ -143,7 +147,7 @@ func NewInternalError(err error) *ErrorDefinition {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Method iDefinition
+// Method Definition
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // A Method definition.
 // It holds a user callback.
@@ -157,16 +161,21 @@ type MethodDef struct { // implements iDefinition
 // Method callback
 type MethodDefCallback = interface{}
 
-// Creates a new method def with auto json schema.
-func NewMethodDef(method MethodDefCallback) *MethodDef {
+// Creates a new method definition with auto json schema.
+func NewMethodDef(method MethodDefCallback) (*MethodDef, error) {
 	md := &MethodDef{
 		method:        method,
 		name:          getFunctionName(method),
 		paramsSchema:  nil,
 		returnsSchema: nil,
 	}
-	md.inspectMethod()
-	return md
+
+	err := md.inspectMethod()
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid method signature")
+	}
+
+	return md, nil
 }
 
 // Creates a new method def with the provided json schema.
@@ -180,19 +189,34 @@ func NewMethodDefWithSchema(method MethodDefCallback, paramsSchema JsonObj, retu
 }
 
 // Try to create json schema from method with introspection.
-func (md *MethodDef) inspectMethod() {
+func (md *MethodDef) inspectMethod() error {
+	if !isFunc(md.method) {
+		return errors.New("not a func")
+	}
+
 	x := reflect.TypeOf(md.method)
 
 	numIn := x.NumIn()   // Count inbound parameters
 	numOut := x.NumOut() // Count out-bounding parameters
 
 	if numOut > 1 {
-		panic("MethodDef only accept callback with one return value.")
+		return errors.New("MethodDef only accept callback with one return value")
+	}
+
+	if numIn == 0 {
+		return errors.New("the func should have at least one param: path []string")
+	}
+
+	// the last argument must be the path: path []string
+	lastArg := x.In(numIn - 1)
+	var checker []string
+	if lastArg != reflect.TypeOf(checker) {
+		return errors.New("the last parameter should be: path []string")
 	}
 
 	var paramsSchema []interface{}
 
-	for i := 0; i < numIn; i++ {
+	for i := 0; i < numIn - 1; i++ { // ignore last param
 		argType := x.In(i)
 		schema := jsonschema.ReflectFromType(argType)
 		paramsSchema = append(paramsSchema, schema)
@@ -213,6 +237,7 @@ func (md *MethodDef) inspectMethod() {
 	md.returnsSchema = JsonObj{
 		"type": returnSchema,
 	}
+	return nil
 }
 
 func (md *MethodDef) searchPath(parts []string) iDefinition {
@@ -339,14 +364,14 @@ type NodeStruct = map[string]iDefinition
 // It holds a user structure (Python object) and optional callbacks.
 type NodeDef struct { // implements iDefinition
 	structure NodeStruct
-	onSet SetCallback
+	onSet     SetCallback
 }
 
 func NewNodeDef(rawNode RawNode, option ...defOption) *NodeDef {
 	opts := getDefOptions(option...)
 	return &NodeDef{
 		structure: initializeStructure(rawNode),
-		onSet: opts.OnSet,
+		onSet:     opts.OnSet,
 	}
 }
 
@@ -384,7 +409,7 @@ func initializeStructure(rawNode RawNode) NodeStruct {
 	var structure = NodeStruct{}
 
 	for k, v := range rawNode {
-		if isMap(v) {	// if its a map
+		if isMap(v) { // if its a map
 			structure[k] = NewNodeDef(v.(RawNode))
 		} else if d, ok := v.(iDefinition); ok { // if its already a definition
 			structure[k] = d
@@ -394,7 +419,6 @@ func initializeStructure(rawNode RawNode) NodeStruct {
 	}
 	return structure
 }
-
 
 func (nd *NodeDef) AddChild(uuid string, node iDefinition) {
 	nd.structure[uuid] = node
@@ -414,4 +438,3 @@ func (nd *NodeDef) RemoveChild(uuid string) iDefinition {
 var N = NewNodeDef
 var A = NewAttributeDef
 var M = NewMethodDef
-
