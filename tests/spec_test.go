@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-
 func TestAskPermission(t *testing.T) {
 	p := setupTest(t, "./scenarios/ask_permission.json")
 	defer p.Stop()
@@ -68,12 +67,33 @@ func TestGetRemoteAttribute(t *testing.T) {
 	assertPlayerSuccess(t, p)
 }
 
+func TestAddMethod(t *testing.T) {
+	p := setupTest(t, "./scenarios/add_method.json")
+	defer p.Stop()
+	client := assertNewClient(t)
 
+	echo := func(msg string, path []string) string {
+		return msg
+	}
 
+	meth, err := client.AddMethod("echo", echo)
+	assert.NoError(t, err)
+	assert.NotNil(t, meth)
 
+	assertPlayerSuccess(t, p)
+}
 
+func TestCallRemoteMethod(t *testing.T) {
+	p := setupTest(t, "./scenarios/call_remote_method.json")
+	defer p.Stop()
+	client := assertNewClient(t)
 
+	echo, err := client.GetRemoteMethod("test", "remote", client.GetHostname(), "echo")
+	assert.NoError(t, err)
 
+	resp, err := echo.Call("hello world")
+	assert.NoError(t, err)
+	assert.Equal(t, "hello world", resp)
 
-
-
+	assertPlayerSuccess(t, p)
+}

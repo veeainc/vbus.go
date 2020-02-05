@@ -27,6 +27,7 @@ func assertPlayerSuccess(t *testing.T, p *player.NatsPlayer) {
 		t.Log(r.String())
 	}
 
+	p.WriteJUnitReport(t.Name() + "_junit.xml")
 	assert.True(t, p.IsSuccess())
 }
 
