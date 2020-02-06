@@ -17,7 +17,13 @@ func setupTest(t *testing.T, scenario string) *player.NatsPlayer {
 		err = os.Remove(file)
 		assert.NoError(t, err)
 	}
-	return player.New("test.vbusgo").Load(scenario).Play()
+
+	p := player.New("test.vbusgo")
+	err = p.Load(scenario)
+	assert.NoError(t, err)
+	err = p.Play()
+	assert.NoError(t, err)
+	return p
 }
 
 func assertPlayerSuccess(t *testing.T, p *player.NatsPlayer) {
