@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/big"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -200,6 +201,7 @@ func OpenWithPassword(id string, pwd string) (*Node, error) {
 		if vbusURLExists == true {
 			if testvBusURL(localConfig.Search("vbus", "url").Data().(string)) == true {
 				vbusURL = localConfig.Search("vbus", "url").Data().(string)
+				hostIP = localConfig.Search("vbus", "hostIP").Data().(string)
 				log.Printf("url from config file ok: " + vbusURL + "\n")
 			} else {
 				log.Printf("url from config file hs: " + localConfig.Search("vbus", "url").Data().(string) + "\n")
@@ -1101,6 +1103,51 @@ func (a *Attribute) SubscribeSet(cb AttributeCallback) error {
 	subListSet = append(subListSet, a.path+".value.set")
 
 	return err
+}
+
+func (v *Node) Expose(name string, protocol string, port int, path string) error {
+	// log.Printf("Expose with... \nname: %s \nprotocol: %s \nport: %d \npath: %s", name, protocol, port, path)
+
+	hostIP := localConfig.S("vbus", "hostIP").Data().(string)
+
+	if hostIP == "" {
+		return errors.New("Didn't find the hostip ")
+	}
+	// log.Printf("hostip: " + hostIP)
+
+	// Construct URI
+	authority := fmt.Sprintf("%s:%d", hostIP, port)
+	// log.Printf("authority: %s", authority)
+
+	u := url.URL{
+		Scheme: protocol,
+		Host:   authority,
+		Path:   path,
+	}
+
+	serviceUri := u.String()
+	// log.Printf("New Service uri %s", serviceUri)
+
+	// if !uris exists
+	// add uris
+	if !v.element.Exists("uris") {
+		v.AddNode("uris", "{}")
+
+		for !v.element.Exists("uris") {
+			// log.Printf("Sleeping because uris doesn't exist yet...")
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	uriNode, err := v.Node("uris")
+	if err != nil {
+		log.Printf("Error finding the URI node")
+		log.Printf(err.Error())
+	} else {
+		uriNode.AddAttribute(name, serviceUri)
+	}
+
+	return nil
 }
 
 // Permission allow permission request to access specific path
