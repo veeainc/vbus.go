@@ -328,7 +328,7 @@ func ToPrettyJson(obj JsonAny) string {
 func getPathInObj(o JsonObj, segments ...string) JsonObj {
 	root := o
 	for _, segment := range segments {
-		if v, ok := o[segment]; ok { // element exists
+		if v, ok := root[segment]; ok { // element exists
 			if c, ok := v.(JsonObj); ok {
 				root = c
 			} else {

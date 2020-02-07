@@ -20,3 +20,17 @@ func TestInvoke(t *testing.T) {
 	assert.Equal(t, err, nil)
 	assert.Equal(t, ret, 42)
 }
+
+func TestGetPathInObj(t *testing.T) {
+	obj := JsonObj{
+		"name": JsonObj{
+			"foo": JsonObj{
+				"bar": JsonObj{
+					"found": true,
+				},
+			},
+		},
+	}
+	found := getPathInObj(obj, "name", "foo", "bar")
+	assert.Equal(t, true, hasKey(found, "found"))
+}
