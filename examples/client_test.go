@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -70,7 +71,7 @@ func TestNodes(t *testing.T) {
 	// In another app
 	attr, err := client.GetRemoteAttr("system", "testgo", client.GetHostname(), "00:45:25:65:25:ff", "sub1", "sub2", "timeout")
 	assert.NoError(t, err)
-	err  = attr.SetValue(666)
+	err = attr.SetValue(666)
 	assert.NoError(t, err)
 
 	scan, err := client.GetRemoteMethod("system", "testgo", client.GetHostname(), "00:45:25:65:25:ff", "sub1", "sub2", "scan")
@@ -78,10 +79,6 @@ func TestNodes(t *testing.T) {
 	resp, err := scan.Call(42)
 	assert.NoError(t, err)
 	assert.Equal(t, "scanning", resp)
-
-	proxy, err := client.Discover("system.testgo", 1*time.Second)
-	assert.NoError(t, err)
-	fmt.Printf("%s", proxy)
 }
 
 func TestZigbeeScan(t *testing.T) {
@@ -124,15 +121,36 @@ func TestZigbeeScan(t *testing.T) {
 	WaitForCtrlC()
 }
 
+// An example on how to recursively traverse all nodes
+func traverseNode(node *vBus.NodeProxy, level int) {
+	for name, elem := range node.Elements() {
+		if elem.IsNode() {
+			n := elem.AsNode()
+			fmt.Printf("%s%s:\n", strings.Repeat(" ", level * 2), name)
+			traverseNode(n, level + 1)
+		} else if elem.IsAttribute() {
+			attr := elem.AsAttribute()
+			fmt.Printf("%s%s = %v:\n", strings.Repeat(" ", level * 2), name, attr.Value())
+		} else if elem.IsMethod() {
+			fmt.Printf("%s%s:\n", strings.Repeat(" ", level * 2), name)
+		}
+	}
+}
+
 func TestZigbeeDiscover(t *testing.T) {
 	client := vBus.NewClient("system", "testgo")
-	_ = client.Connect()
+	err := client.Connect()
+	assert.NoError(t, err)
 
-	proxy, err := client.Discover("system.zigbee", 1*time.Second)
+	elem, err := client.Discover("system.zigbee", 1*time.Second)
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Printf("%s", proxy)
+
+	if elem.IsNode() {
+		traverseNode(elem.AsNode(), 0)
+	}
+
 }
 
 func WaitForCtrlC() {

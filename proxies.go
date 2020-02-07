@@ -104,7 +104,7 @@ func NewUnknownProxy(client *ExtendedNatsClient, path string, rawNode JsonObj) *
 
 // Is it an attribute ?
 func (up *UnknownProxy) IsAttribute() bool {
-	return isAttribute(&up.rawDef)
+	return isAttribute(up.rawDef)
 }
 
 // Transform to an AttributeProxy (use IsAttribute before).
@@ -114,7 +114,7 @@ func (up *UnknownProxy) AsAttribute() *AttributeProxy {
 
 // Is it a method ?
 func (up *UnknownProxy) IsMethod() bool {
-	return isMethod(&up.rawDef)
+	return isMethod(up.rawDef)
 }
 
 // Transform to an MethodProxy (use IsMethod before).
@@ -124,7 +124,7 @@ func (up *UnknownProxy) AsMethod() *MethodProxy {
 
 // Is it a node ?
 func (up *UnknownProxy) IsNode() bool {
-	return isNode(&up.rawDef)
+	return isNode(up.rawDef)
 }
 
 // Transform to an NodeProxy (use IsMethod before).
@@ -145,6 +145,14 @@ func NewAttributeProxy(client *ExtendedNatsClient, path string, rawNode JsonObj)
 	return &AttributeProxy{
 		ProxyBase: NewProxyBase(client, path, rawNode),
 		rawAttr:   rawNode,
+	}
+}
+
+func (ap *AttributeProxy) Value() interface{} {
+	if hasKey(ap.rawAttr, "value") {
+		return ap.rawAttr["value"]
+	} else {
+		return nil
 	}
 }
 
@@ -254,6 +262,39 @@ func (np *NodeProxy) GetAttribute(parts ...string) (*AttributeProxy, error) {
 		}
 	}
 }
+
+func (np *NodeProxy) Elements() map[string]*UnknownProxy {
+	elements := make(map[string]*UnknownProxy)
+	for k, obj := range np.rawNode {
+		if jsonObj, ok := obj.(JsonObj); ok {
+			elements[k] = NewUnknownProxy(np.client, joinPath(np.GetPath(), k), jsonObj)
+		} else {
+			log.Warnf("skipping unknown object: %v", ToPrettyJson(obj))
+		}
+	}
+	return elements
+}
+
+func (np *NodeProxy) Attributes() map[string]*AttributeProxy {
+	elements := make(map[string]*AttributeProxy)
+	for k, obj := range np.rawNode {
+		if isAttribute(obj) {
+			elements[k] = NewAttributeProxy(np.client, joinPath(np.GetPath(), k), obj.(JsonObj))
+		}
+	}
+	return elements
+}
+
+func (np *NodeProxy) Methods() map[string]*MethodProxy {
+	elements := make(map[string]*MethodProxy)
+	for k, obj := range np.rawNode {
+		if isMethod(&obj) {
+			elements[k] = NewMethodProxy(np.client, joinPath(np.GetPath(), k), obj.(JsonObj))
+		}
+	}
+	return elements
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Method Proxy
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

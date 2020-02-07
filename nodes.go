@@ -80,7 +80,7 @@ func NewNode(nats *ExtendedNatsClient, uuid string, definition *NodeDef, parent 
 // Returns: a new node
 func (n *Node) AddNode(uuid string, rawNode RawNode, options ...defOption) (*Node, error) {
 	def := NewNodeDef(rawNode, options...)  // create the definition
-	node := NewNode(n.client, uuid, def, n) // create the connected nod
+	node := NewNode(n.client, uuid, def, n) // create the connected node
 	n.definition.AddChild(uuid, def)        // add it
 
 	// send the node definition on Vbus
@@ -96,7 +96,7 @@ func (n *Node) AddNode(uuid string, rawNode RawNode, options ...defOption) (*Nod
 // Add a child attribute and notify Vbus
 func (n *Node) AddAttribute(uuid string, value interface{}, options ...defOption) (*Attribute, error) {
 	def := NewAttributeDef(uuid, value, options...) // create the definition
-	node := NewAttribute(n.client, uuid, def, n)    // create the connected nod
+	node := NewAttribute(n.client, uuid, def, n)    // create the connected node
 	n.definition.AddChild(uuid, def)                // add it
 
 	// send the node definition on Vbus
@@ -113,17 +113,13 @@ func (n *Node) AddAttribute(uuid string, value interface{}, options ...defOption
 // The method must be a func(args..., path []string)
 // The last argument is mandatory, it will receive the splited Nats path.
 func (n *Node) AddMethod(uuid string, method MethodDefCallback) (*Method, error) {
-	def, err := NewMethodDef(method)               // create the definition
-	if err != nil {
-		return nil, err
-	}
-
-	node := NewMethod(n.client, uuid, def, n) // create the connected nod
+	def := NewMethodDef(method)               // create the definition
+	node := NewMethod(n.client, uuid, def, n) // create the connected node
 	n.definition.AddChild(uuid, def)          // add it
 
 	// send the node definition on Vbus
 	packet := JsonObj{uuid: def.ToRepr()}
-	err = n.client.Publish(joinPath(n.GetPath(), notifAdded), packet)
+	err := n.client.Publish(joinPath(n.GetPath(), notifAdded), packet)
 	if err != nil {
 		return node, errors.Wrap(err, "cannot publish new method")
 	}
@@ -235,7 +231,7 @@ func NewNodeManager(nats *ExtendedNatsClient) *NodeManager {
 	}
 }
 
-func (nm *NodeManager) Discover(natsPath string, timeout time.Duration) (*NodeProxy, error) {
+func (nm *NodeManager) Discover(natsPath string, timeout time.Duration) (*UnknownProxy, error) {
 	var resp JsonObj
 
 	inbox := nm.client.client.NewRespInbox()
@@ -270,7 +266,7 @@ func (nm *NodeManager) Discover(natsPath string, timeout time.Duration) (*NodePr
 	_ = sub.Unsubscribe()
 	_ = sub.Drain()
 
-	return NewNodeProxy(nm.client, natsPath, resp), nil
+	return NewUnknownProxy(nm.client, natsPath, resp), nil
 }
 
 func (nm *NodeManager) Initialize() error {

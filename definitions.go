@@ -26,17 +26,17 @@ type iDefinition interface {
 }
 
 // Tells if a raw node is an attribute.
-func isAttribute(node *interface{}) bool {
+func isAttribute(node interface{}) bool {
 	return hasKey(node, "schema")
 }
 
 // Tells if a raw node is a method.
-func isMethod(node *interface{}) bool {
+func isMethod(node interface{}) bool {
 	return hasKey(node, "params") && hasKey(node, "returns")
 }
 
 // Tells if a raw node is a node.
-func isNode(node *interface{}) bool {
+func isNode(node interface{}) bool {
 	return !isAttribute(node) && !isMethod(node)
 }
 
@@ -162,7 +162,7 @@ type MethodDef struct { // implements iDefinition
 type MethodDefCallback = interface{}
 
 // Creates a new method definition with auto json schema.
-func NewMethodDef(method MethodDefCallback) (*MethodDef, error) {
+func NewMethodDef(method MethodDefCallback) *MethodDef {
 	md := &MethodDef{
 		method:        method,
 		name:          getFunctionName(method),
@@ -172,10 +172,10 @@ func NewMethodDef(method MethodDefCallback) (*MethodDef, error) {
 
 	err := md.inspectMethod()
 	if err != nil {
-		return nil, errors.Wrap(err, "invalid method signature")
+		panic(errors.Wrap(err, "invalid method signature"))
 	}
 
-	return md, nil
+	return md
 }
 
 // Creates a new method def with the provided json schema.
