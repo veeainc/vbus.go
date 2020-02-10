@@ -1,5 +1,5 @@
-bitbucket.org/vbus/nats-scenario-player v0.0.0-20200206102717-edb97826ab37 h1:Bn3D6q4zzZtNys8dCYMVM7l7DNbrV0Z14mnMDG2SWDE=
-bitbucket.org/vbus/nats-scenario-player v0.0.0-20200206102717-edb97826ab37/go.mod h1:Qc77+KjAKVBW3JdmA6171V0kKpzWg5nUyPiBa/A/ByE=
+bitbucket.org/vbus/nats-scenario-player v0.0.0-20200210120016-c5b1e8c6f0e7 h1:dsYhI172yB09gzT9ToESFEpfDs6CSr2DxADYESFQizs=
+bitbucket.org/vbus/nats-scenario-player v0.0.0-20200210120016-c5b1e8c6f0e7/go.mod h1:Qc77+KjAKVBW3JdmA6171V0kKpzWg5nUyPiBa/A/ByE=
 github.com/alecthomas/jsonschema v0.0.0-20200127222324-dd4542c1f589 h1:Ev3H/smEOziBuJdLm7J4JI6baieXE8RVMNBejT/hq3Q=
 github.com/alecthomas/jsonschema v0.0.0-20200127222324-dd4542c1f589/go.mod h1:/n6+1/DWPltRLWL/VKyUxg6tzsl5kHUCcraimt4vr60=
 github.com/cenkalti/backoff v2.2.1+incompatible h1:tNowT99t7UNflLxfYYSlKYsBpXdEet03Pg2g16Swow4=

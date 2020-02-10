@@ -3,7 +3,7 @@ module bitbucket.org/vbus/vbus.go
 go 1.13
 
 require (
-	bitbucket.org/vbus/nats-scenario-player v0.0.0-20200206102717-edb97826ab37
+	bitbucket.org/vbus/nats-scenario-player v0.0.0-20200210120016-c5b1e8c6f0e7
 	github.com/alecthomas/jsonschema v0.0.0-20200127222324-dd4542c1f589
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/godbus/dbus v4.1.0+incompatible
