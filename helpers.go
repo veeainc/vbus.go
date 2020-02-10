@@ -344,3 +344,16 @@ func getPathInObj(o JsonObj, segments ...string) JsonObj {
 func isFunc(v interface{}) bool {
 	return reflect.TypeOf(v).Kind() == reflect.Func
 }
+
+func structToJsonObj(structure json.Marshaler) JsonObj {
+	var input map[string]interface{}
+	inrec, _ := json.Marshal(structure)
+	_ = json.Unmarshal(inrec, &input)
+
+	// iterate through inrecs
+	var output JsonObj = make(JsonObj)
+	for field, val := range input {
+		output[field] = val
+	}
+	return output
+}

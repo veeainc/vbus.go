@@ -216,27 +216,27 @@ func (md *MethodDef) inspectMethod() error {
 
 	var paramsSchema []interface{}
 
-	for i := 0; i < numIn - 1; i++ { // ignore last param
+	for i := 0; i < numIn-1; i++ { // ignore last param
 		argType := x.In(i)
 		schema := jsonschema.ReflectFromType(argType)
 		paramsSchema = append(paramsSchema, schema)
 	}
 
-	var returnSchema interface{}
+	var returnSchema *jsonschema.Schema
 
 	if numOut > 0 { // has return value
-		returnSchema = jsonschema.ReflectFromType(x.Out(0)).Type
+		returnSchema = jsonschema.ReflectFromType(x.Out(0))
 	} else { // no return value
-		returnSchema = "null"
+		returnSchema = &jsonschema.Schema{
+			Type: &jsonschema.Type{Type: "null"},
+		}
 	}
 
 	md.paramsSchema = JsonObj{
 		"type":  "array",
 		"items": paramsSchema,
 	}
-	md.returnsSchema = JsonObj{
-		"type": returnSchema,
-	}
+	md.returnsSchema = structToJsonObj(returnSchema)
 	return nil
 }
 
