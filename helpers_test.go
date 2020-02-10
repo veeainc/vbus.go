@@ -34,3 +34,10 @@ func TestGetPathInObj(t *testing.T) {
 	found := getPathInObj(obj, "name", "foo", "bar")
 	assert.Equal(t, true, hasKey(found, "found"))
 }
+
+
+func TestFromVbus(t *testing.T) {
+	data := []byte{}
+	_, err := fromVbus(data)
+	assert.NilError(t, err)
+}
