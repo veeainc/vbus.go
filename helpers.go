@@ -230,6 +230,9 @@ func hasKey(obj interface{}, key string) bool {
 }
 
 func isSlice(v interface{}) bool {
+	if v == nil {
+		return false
+	}
 	return reflect.TypeOf(v).Kind() == reflect.Slice
 }
 
@@ -243,7 +246,13 @@ func invokeFunc(fn interface{}, args ...interface{}) (ret interface{}, err error
 	// Recover in case of panic
 	defer func() {
 		if r := recover(); r != nil {
-			err = errors.New(r.(string))
+			if s, ok := r.(string); ok {
+				err = errors.New(s)
+			} else if e, ok := r.(error); ok {
+				err = e
+			} else {
+				err = errors.New("unknown error in invokeFunc")
+			}
 		}
 	}()
 
