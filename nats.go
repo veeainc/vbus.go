@@ -3,10 +3,6 @@ package vBus
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/nats-io/nats.go"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"golang.org/x/crypto/bcrypt"
 	"io/ioutil"
 	"net"
 	"os"
@@ -14,6 +10,11 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/nats-io/nats.go"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -261,6 +262,11 @@ func (c *ExtendedNatsClient) Subscribe(base string, cb NatsCallback, advOpts ...
 // Permissions
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 func (c *ExtendedNatsClient) AskPermission(permission string) (bool, error) {
+
+	if permission == "" {
+		return false, errors.Wrap(err, "permission path empty")
+	}
+
 	config, err := c.readOrGetDefaultConfig()
 	if err != nil {
 		return false, errors.Wrap(err, "cannot read config")
