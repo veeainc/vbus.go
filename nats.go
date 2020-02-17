@@ -262,9 +262,8 @@ func (c *ExtendedNatsClient) Subscribe(base string, cb NatsCallback, advOpts ...
 // Permissions
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 func (c *ExtendedNatsClient) AskPermission(permission string) (bool, error) {
-
 	if permission == "" {
-		return false, errors.Wrap(err, "permission path empty")
+		return false, errors.New("permission path empty")
 	}
 
 	config, err := c.readOrGetDefaultConfig()
