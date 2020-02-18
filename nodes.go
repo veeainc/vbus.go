@@ -4,8 +4,10 @@
 package vBus
 
 import (
+	"fmt"
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
+	"net"
 	"strings"
 	"time"
 )
@@ -17,6 +19,7 @@ const (
 	notifValueGet    = "value.get"
 	notifSetted      = "set"
 	notifValueSetted = "value.set"
+	exposeNodeUuid   = "uris"
 )
 
 // A Vbus connected element that send updates.
@@ -221,13 +224,15 @@ func NewMethod(nats *ExtendedNatsClient, uuid string, definition *MethodDef, par
 // The NodeManager handle high level action like discovering nodes.
 type NodeManager struct {
 	*Node
-	subs []*nats.Subscription
+	subs     []*nats.Subscription
+	urisNode *Node
 }
 
 // Creates a new NodeManager. Don't forget to defer Close()
 func NewNodeManager(nats *ExtendedNatsClient) *NodeManager {
 	return &NodeManager{
-		Node: NewNode(nats, "", NewNodeDef(RawNode{}), nil),
+		Node:     NewNode(nats, "", NewNodeDef(RawNode{}), nil),
+		urisNode: nil,
 	}
 }
 
@@ -347,4 +352,26 @@ func (nm *NodeManager) GetRemoteMethod(parts ...string) (*MethodProxy, error) {
 
 func (nm *NodeManager) GetRemoteAttr(parts ...string) (*AttributeProxy, error) {
 	return NewNodeProxy(nm.client, "", JsonObj{}).GetAttribute(parts...)
+}
+
+// Expose a service identified with an uri on Vbus.
+func (nm *NodeManager) Expose(name, protocol string, port int, path string) error {
+	// resolve current hostname to get ip address
+	addr, err := net.LookupIP(nm.client.GetHostname())
+	if err != nil {
+		return errors.Wrap(err, "Cannot resolve hostname")
+	}
+	ipAddress := addr[0]
+	uri := fmt.Sprintf("%v://%v:%v/%v", protocol, ipAddress, port, path)
+
+	if nm.urisNode == nil {
+		node, err := nm.AddNode(exposeNodeUuid, RawNode{})
+		if err != nil {
+			return errors.Wrap(err, "cannot create 'uris' node")
+		}
+		nm.urisNode = node
+	}
+
+	_, err = nm.urisNode.AddAttribute(name, uri)
+	return err
 }
