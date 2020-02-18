@@ -14,6 +14,7 @@ require (
 	github.com/pkg/errors v0.8.1
 	github.com/robpike/filter v0.0.0-20150108201509-2984852a2183
 	github.com/sirupsen/logrus v1.4.2
+	github.com/stretchr/testify v1.3.1-0.20190311161405-34c6fa2dc709
 	golang.org/x/crypto v0.0.0-20200109152110-61a87790db17
 	gotest.tools v2.2.0+incompatible
 )

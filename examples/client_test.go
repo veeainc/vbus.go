@@ -153,6 +153,23 @@ func TestZigbeeDiscover(t *testing.T) {
 
 }
 
+func TestExpose(t *testing.T) {
+	client := vBus.NewClient("system", "testgo")
+	err := client.Connect()
+	assert.NoError(t, err)
+
+	err = client.Expose("music", "https", 8000, "api/v2")
+	assert.NoError(t, err)
+	err = client.Expose("notifs", "https", 8000, "api/v2")
+	assert.NoError(t, err)
+
+	uris, err := client.GetRemoteNode("system", "testgo", client.GetHostname(), "uris")
+	assert.NoError(t, err)
+	fmt.Println(uris.String())
+
+	WaitForCtrlC()
+}
+
 func WaitForCtrlC() {
 	var end_waiter sync.WaitGroup
 	end_waiter.Add(1)
