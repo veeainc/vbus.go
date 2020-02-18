@@ -392,7 +392,7 @@ func (nd *NodeDef) handleSet(data interface{}, parts []string) (interface{}, err
 }
 
 func (nd *NodeDef) handleGet(data interface{}, parts []string) (interface{}, error) {
-	panic("implement me")
+	return nd.ToRepr(), nil
 }
 
 func (nd *NodeDef) ToRepr() JsonObj {
