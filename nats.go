@@ -176,7 +176,7 @@ func WithoutHost() AdvOption {
 func getAdvOptions(advOpts ...AdvOption) AdvOptions {
 	// set default options
 	opts := AdvOptions{
-		Timeout:  500 * time.Millisecond,
+		Timeout:  1000 * time.Millisecond,
 		WithHost: true,
 		WithId:   true,
 	}
