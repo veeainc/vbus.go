@@ -32,3 +32,8 @@ func (c *Client) Connect() error {
 func (c *Client) AskPermission(permission string) (bool, error) {
 	return c.client.AskPermission(permission)
 }
+
+// Retrieve client configuration (read only).
+func (c *Client) GetConfig() (*configuration, error) {
+	return c.client.readOrGetDefaultConfig()
+}
