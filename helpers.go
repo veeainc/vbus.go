@@ -370,3 +370,20 @@ func structToJsonObj(structure json.Marshaler) JsonObj {
 	}
 	return output
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Format
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+type JsonByteArray []uint8
+
+// Utility type to force conversion of byte[] to a Json array.
+func (u JsonByteArray) MarshalJSON() ([]byte, error) {
+	var result string
+	if u == nil {
+		result = "null"
+	} else {
+		result = strings.Join(strings.Fields(fmt.Sprintf("%d", u)), ",")
+	}
+	return []byte(result), nil
+}
