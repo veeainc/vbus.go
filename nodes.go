@@ -3,10 +3,12 @@
 package vBus
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
 	"net"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -228,6 +230,18 @@ type NodeManager struct {
 	urisNode *Node
 }
 
+type ModuleStatus struct {
+	HeapSize uint64 `json:"heapSize"`
+}
+
+// Response format for module info
+type ModuleInfo struct {
+	Id       string       `json:"id"`
+	Hostname string       `json:"hostname"`
+	Client   string       `json:"client"`
+	Status   ModuleStatus `json:"status"`
+}
+
 // Creates a new NodeManager. Don't forget to defer Close()
 func NewNodeManager(nats *ExtendedNatsClient) *NodeManager {
 	return &NodeManager{
@@ -274,6 +288,37 @@ func (nm *NodeManager) Discover(natsPath string, timeout time.Duration) (*Unknow
 	return NewUnknownProxy(nm.client, natsPath, resp), nil
 }
 
+func (nm *NodeManager) DiscoverModules(timeout time.Duration) ([]ModuleInfo, error) {
+	var resp []ModuleInfo
+
+	inbox := nm.client.client.NewRespInbox()
+	sub, err := nm.client.client.Subscribe(inbox, func(msg *nats.Msg) {
+		var info ModuleInfo
+		err := json.Unmarshal(msg.Data, &info)
+		if err != nil {
+			log.Warnf("received invalid info from %s, skipping", msg.Subject)
+			return // skip
+		}
+		resp = append(resp, info)
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot subscribe to inbox")
+	}
+
+	err = nm.client.client.PublishRequest("info", inbox, toVbus(nil))
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot publish")
+	}
+
+	timer := time.NewTimer(timeout)
+	<-timer.C
+
+	_ = sub.Unsubscribe()
+	_ = sub.Drain()
+
+	return resp, nil
+}
+
 func (nm *NodeManager) Initialize() error {
 	// Subscribe to root path: "app-domain.app-name"
 	sub, err := nm.client.Subscribe("", func(data interface{}, segments []string) interface{} {
@@ -300,7 +345,31 @@ func (nm *NodeManager) Initialize() error {
 		return errors.Wrap(err, "cannot subscribe to all")
 	}
 	nm.subs = append(nm.subs, sub) // save sub
+
+	// Subscribe to generic info path
+	sub, err = nm.client.Subscribe("info", func(data interface{}, segments []string) interface{} {
+		return nm.getModuleInfo()
+	}, WithoutHost(), WithoutId())
+	if err != nil {
+		return errors.Wrap(err, "cannot subscribe to info path")
+	}
+	nm.subs = append(nm.subs, sub) // save sub
+
 	return nil
+}
+
+func (nm *NodeManager) getModuleInfo() ModuleInfo {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	return ModuleInfo{
+		Id:       nm.client.GetId(),
+		Hostname: nm.client.GetHostname(),
+		Client:   "golang",
+		Status: ModuleStatus{
+			HeapSize: m.HeapAlloc,
+		},
+	}
 }
 
 // Handle incoming get requests.
