@@ -147,16 +147,16 @@ func (n *Node) GetAttribute(parts ...string) (*Attribute, error) {
 // Remove an element in this node and notify Vbus
 func (n *Node) RemoveElement(uuid string) error {
 	def := n.definition.RemoveChild(uuid)
-
-	if def != nil {
-		// send the node definition on Vbus
-		packet := JsonObj{uuid: def.ToRepr()}
-		err := n.client.Publish(joinPath(n.GetPath(), notifRemoved), packet)
-		if err != nil {
-			return nil
-		}
+	if def == nil {
+		return errors.New(fmt.Sprintf("element not found: %v", uuid))
 	}
-	return nil
+
+	// send the node definition on Vbus
+	packet := JsonObj{uuid: def.ToRepr()}
+	if err := n.client.Publish(joinPath(n.GetPath(), notifRemoved), packet); err != nil {
+		return errors.Wrap(err, "element deleted but cannot send vbus notification")
+	}
+	return nil // success
 }
 
 func (n *Node) String() string {
