@@ -93,14 +93,17 @@ func readEnvVar() map[string]string {
 	}
 }
 
+// Get resolved hostname.
 func (c *ExtendedNatsClient) GetHostname() string {
 	return c.hostname
 }
 
+// Get application id.
 func (c *ExtendedNatsClient) GetId() string {
 	return c.id
 }
 
+// Try to connect.
 func (c *ExtendedNatsClient) Connect() error {
 	config, err := c.readOrGetDefaultConfig()
 	if err != nil {
@@ -141,41 +144,42 @@ func (c *ExtendedNatsClient) Connect() error {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Advanced Nats Functions
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 // Advanced Nats methods options
-type AdvOptions struct {
+type advOptions struct {
 	Timeout  time.Duration
 	WithId   bool
 	WithHost bool
 }
 
 // Option is a function on the options for a connection.
-type AdvOption func(*AdvOptions)
+type AdvOption func(*advOptions)
 
 // Set optional timeout
 func Timeout(t time.Duration) AdvOption {
-	return func(o *AdvOptions) {
+	return func(o *advOptions) {
 		o.Timeout = t
 	}
 }
 
 // Do not include this service id before the provided path
 func WithoutId() AdvOption {
-	return func(o *AdvOptions) {
+	return func(o *advOptions) {
 		o.WithId = false
 	}
 }
 
 // Do not include this service host before the provided path
 func WithoutHost() AdvOption {
-	return func(o *AdvOptions) {
+	return func(o *advOptions) {
 		o.WithHost = false
 	}
 }
 
 // Retrieve all options to a struct
-func getAdvOptions(advOpts ...AdvOption) AdvOptions {
+func getAdvOptions(advOpts ...AdvOption) advOptions {
 	// set default options
-	opts := AdvOptions{
+	opts := advOptions{
 		Timeout:  1000 * time.Millisecond,
 		WithHost: true,
 		WithId:   true,
@@ -187,7 +191,7 @@ func getAdvOptions(advOpts ...AdvOption) AdvOptions {
 }
 
 // Compute the path with some options
-func (c *ExtendedNatsClient) getPath(base string, opts AdvOptions) (path string) {
+func (c *ExtendedNatsClient) getPath(base string, opts advOptions) (path string) {
 	path = base
 	if opts.WithHost {
 		path = joinPath(c.hostname, base)
@@ -216,13 +220,6 @@ func (c *ExtendedNatsClient) Publish(base string, data interface{}, advOpts ...A
 
 // Utility method that automatically parse subject wildcard and chevron to arguments.
 // If a value is returned, it is published on the reply subject.
-// Example:
-//
-// client.Subscribe("system.*.*", func(data interface{], wildcard1 string, wildcard2 string) {
-// 		fmt.Println("first wildcard: %s", wildcard1)
-// 		fmt.Println("second wildcard: %s", wildcard2)
-//      return 42 // will be published automatically
-// })
 func (c *ExtendedNatsClient) Subscribe(base string, cb NatsCallback, advOpts ...AdvOption) (*nats.Subscription, error) {
 	opts := getAdvOptions(advOpts...)
 	natsPath := c.getPath(base, opts)
@@ -261,6 +258,8 @@ func (c *ExtendedNatsClient) Subscribe(base string, cb NatsCallback, advOpts ...
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Permissions
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Ask for the specified permission.
 func (c *ExtendedNatsClient) AskPermission(permission string) (bool, error) {
 	if permission == "" {
 		return false, errors.New("permission path empty")
@@ -290,6 +289,7 @@ func (c *ExtendedNatsClient) AskPermission(permission string) (bool, error) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Authentication
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 // Publish on Vbus the user described in configuration.
 func (c *ExtendedNatsClient) publishUser(url string, config *configuration) error {
 	conn, err := nats.Connect(url, nats.UserInfo(anonymousUser, anonymousUser))
@@ -376,6 +376,7 @@ func (c *ExtendedNatsClient) findVbusUrl(config *configuration) (serverUrl strin
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Configuration
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 type permConfig struct {
 	Subscribe []string `json:"subscribe"`
 	Publish   []string `json:"publish"`

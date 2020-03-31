@@ -1,5 +1,4 @@
-// This module contains node definition classes.
-// Theses classes are used to hold user data like the json structure, callbacks, etc...
+// Node definitions are used to hold user data like the json structure, callbacks, etc...
 // They are not connected to Vbus. They just act as a data holder.
 // Each of theses classes can be serialized to Json with ToRepr() to be sent on Vbus.
 package vBus
@@ -80,6 +79,8 @@ func getDefOptions(advOpts ...defOption) DefOptions {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Error Definition
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Represents a Vbus error.
 type ErrorDefinition struct { // implements iDefinition
 	code    int
 	message string
@@ -149,6 +150,7 @@ func NewInternalError(err error) *ErrorDefinition {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Method Definition
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 // A Method definition.
 // It holds a user callback.
 type MethodDef struct { // implements iDefinition
@@ -284,6 +286,7 @@ type AttributeDef struct { // implements iDefinition
 	onGet  GetCallback
 }
 
+// Creates an attribute definition with an inferred Json-Schema
 func NewAttributeDef(uuid string, value interface{}, options ...defOption) *AttributeDef {
 	opts := getDefOptions(options...)
 	if value == nil {
@@ -300,6 +303,7 @@ func NewAttributeDef(uuid string, value interface{}, options ...defOption) *Attr
 	}
 }
 
+// Creates an attribute definition with a specific Json-Schema
 func NewAttributeDefWithSchema(uuid string, value interface{}, schema map[string]interface{},
 	onSet SetCallback, onGet GetCallback) *AttributeDef {
 	return &AttributeDef{

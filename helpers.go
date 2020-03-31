@@ -375,9 +375,9 @@ func structToJsonObj(structure json.Marshaler) JsonObj {
 // Format
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Utility type to force conversion of byte[] to a Json array.
 type JsonByteArray []uint8
 
-// Utility type to force conversion of byte[] to a Json array.
 func (u JsonByteArray) MarshalJSON() ([]byte, error) {
 	var result string
 	if u == nil {

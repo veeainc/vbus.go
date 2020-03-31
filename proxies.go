@@ -135,7 +135,8 @@ func (up *UnknownProxy) AsNode() *NodeProxy {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Attribute Proxy
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Represents remote node actions.
+
+// Represents remote attribute actions.
 type AttributeProxy struct {
 	*ProxyBase
 	rawAttr JsonObj
@@ -148,6 +149,7 @@ func NewAttributeProxy(client *ExtendedNatsClient, path string, rawNode JsonObj)
 	}
 }
 
+// Get cached value (no remote action).
 func (ap *AttributeProxy) Value() interface{} {
 	if hasKey(ap.rawAttr, "value") {
 		return ap.rawAttr["value"]
@@ -156,10 +158,12 @@ func (ap *AttributeProxy) Value() interface{} {
 	}
 }
 
+// Set remote value.
 func (ap *AttributeProxy) SetValue(value interface{}) error {
 	return ap.client.Publish(joinPath(ap.GetPath(), notifValueSetted), value, WithoutHost(), WithoutId())
 }
 
+// Get remote value.
 func (ap *AttributeProxy) ReadValue() (interface{}, error) {
 	return ap.client.Request(joinPath(ap.GetPath(), notifValueGet), nil, WithoutHost(), WithoutId())
 }
@@ -167,6 +171,7 @@ func (ap *AttributeProxy) ReadValue() (interface{}, error) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Node Proxy
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 // Represents remote node actions.
 type NodeProxy struct {
 	*ProxyBase
@@ -180,6 +185,7 @@ func NewNodeProxy(client *ExtendedNatsClient, path string, rawNode JsonObj) *Nod
 	}
 }
 
+// Get raw tree.
 func (np *NodeProxy) Tree() JsonObj {
 	return np.rawNode
 }
@@ -263,6 +269,7 @@ func (np *NodeProxy) GetAttribute(parts ...string) (*AttributeProxy, error) {
 	}
 }
 
+// Retrieve all elements contained in this node.
 func (np *NodeProxy) Elements() map[string]*UnknownProxy {
 	elements := make(map[string]*UnknownProxy)
 	for k, obj := range np.rawNode {
@@ -275,6 +282,7 @@ func (np *NodeProxy) Elements() map[string]*UnknownProxy {
 	return elements
 }
 
+// Retrieve only attributes.
 func (np *NodeProxy) Attributes() map[string]*AttributeProxy {
 	elements := make(map[string]*AttributeProxy)
 	for k, obj := range np.rawNode {
@@ -285,6 +293,7 @@ func (np *NodeProxy) Attributes() map[string]*AttributeProxy {
 	return elements
 }
 
+// Retrieve only methods
 func (np *NodeProxy) Methods() map[string]*MethodProxy {
 	elements := make(map[string]*MethodProxy)
 	for k, obj := range np.rawNode {
@@ -298,12 +307,14 @@ func (np *NodeProxy) Methods() map[string]*MethodProxy {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Method Proxy
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 // Represents remote method actions
 type MethodProxy struct { // implements IProxy
 	*ProxyBase
 	methodDef JsonObj
 }
 
+// Creates a new MethodProxy.
 func NewMethodProxy(client *ExtendedNatsClient, path string, methodDef JsonObj) *MethodProxy {
 	return &MethodProxy{
 		ProxyBase: NewProxyBase(client, path, methodDef),
@@ -311,12 +322,12 @@ func NewMethodProxy(client *ExtendedNatsClient, path string, methodDef JsonObj) 
 	}
 }
 
-// Call this method with some arguments.
+// Call the remote method with some arguments.
 func (mp *MethodProxy) Call(args ...interface{}) (interface{}, error) {
 	return mp.client.Request(joinPath(mp.path, notifSetted), args, WithoutHost(), WithoutId())
 }
 
-// Call this method with some arguments and a timeout.
+// Call the remote method with some arguments and wait for a timeout.
 func (mp *MethodProxy) CallWithTimeout(timeout time.Duration, args ...interface{}) (interface{}, error) {
 	return mp.client.Request(joinPath(mp.path, notifSetted), args, Timeout(timeout), WithoutHost(), WithoutId())
 }

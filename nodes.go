@@ -1,4 +1,3 @@
-// This module contains connected nodes.
 // A connected node is composed of a node definition and send commands over the Vbus when the
 // user performs action on it. For example: add a child node, delete a node, call a method, etc...
 package vBus
@@ -167,14 +166,15 @@ func (n *Node) String() string {
 // Attribute
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// A VBus connect attribute.
+// A VBus connected attribute.
 type Attribute struct { // implements IElement
 	*Element
 	//
 	definition *AttributeDef
 }
 
-// Creates an Attribute.
+// Creates an attribute.
+// You should create attribute with node.AddAttribute
 func NewAttribute(nats *ExtendedNatsClient, uuid string, definition *AttributeDef, parent IElement) *Attribute {
 	return &Attribute{
 		Element: &Element{
