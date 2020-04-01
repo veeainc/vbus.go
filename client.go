@@ -8,8 +8,8 @@ type Client struct {
 }
 
 // Creates a new client with options.
-func NewClient(domain, appId string, options ...NatsOption) *Client {
-	nats := NewExtendedNatsClient(domain, appId, options...)
+func NewClient(domain, appId string) *Client {
+	nats := NewExtendedNatsClient(domain, appId)
 	return &Client{
 		nats:        nats,
 		NodeManager: NewNodeManager(nats),
@@ -20,8 +20,8 @@ func (c *Client) GetHostname() string { return c.nats.GetHostname() }
 
 func (c *Client) GetId() string { return c.nats.GetId() }
 
-func (c *Client) Connect() error {
-	err := c.nats.Connect()
+func (c *Client) Connect(options ...natsConnectOption) error {
+	err := c.nats.Connect(options...)
 	if err != nil {
 		return err
 	}

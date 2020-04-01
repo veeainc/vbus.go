@@ -38,27 +38,37 @@ type ExtendedNatsClient struct {
 type NatsCallback = func(data interface{}, segments []string) interface{}
 
 // ExtendedNatsClient options.
-type NatsOptions struct {
-	HubId string
+type natsConnectOptions struct {
+	HubId    string
+	Login    string
+	Password string
+}
+
+// Check if option contains user information.
+func (o natsConnectOptions) hasUser() bool {
+	return o.Login != "" && o.Password != ""
 }
 
 // Option is a function on the options for a connection.
-type NatsOption func(*NatsOptions)
+type natsConnectOption func(*natsConnectOptions)
 
 // Add the hub id option.
-func HubId(hubId string) NatsOption {
-	return func(o *NatsOptions) {
+func HubId(hubId string) natsConnectOption {
+	return func(o *natsConnectOptions) {
 		o.HubId = hubId
 	}
 }
 
-// Constructor when the server and the client are running on the same system (same hostname).
-func NewExtendedNatsClient(appDomain, appId string, options ...NatsOption) *ExtendedNatsClient {
-	opts := NatsOptions{}
-	for _, opt := range options {
-		opt(&opts)
+// Connect with specified user.
+func WithUser(login, pwd string) natsConnectOption {
+	return func(o *natsConnectOptions) {
+		o.Login = login
+		o.Password = pwd
 	}
+}
 
+// Constructor when the server and the client are running on the same system (same hostname).
+func NewExtendedNatsClient(appDomain, appId string) *ExtendedNatsClient {
 	hostname := getHostname()
 
 	client := &ExtendedNatsClient{
@@ -67,12 +77,6 @@ func NewExtendedNatsClient(appDomain, appId string, options ...NatsOption) *Exte
 		id:             fmt.Sprintf("%s.%s", appDomain, appId),
 		env:            readEnvVar(),
 		client:         nil,
-	}
-
-	if opts.HubId != "" {
-		client.remoteHostname = opts.HubId
-	} else {
-		client.remoteHostname = hostname
 	}
 
 	client.rootFolder = client.env[envVbusPath]
@@ -104,41 +108,72 @@ func (c *ExtendedNatsClient) GetId() string {
 }
 
 // Try to connect.
-func (c *ExtendedNatsClient) Connect() error {
-	config, err := c.readOrGetDefaultConfig()
-	if err != nil {
-		return errors.Wrap(err, "cannot retrieve configuration")
+func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
+	// retrieve options
+	opts := natsConnectOptions{}
+	for _, opt := range options {
+		opt(&opts)
 	}
 
-	url, newHost, err := c.findVbusUrl(config)
-	if err != nil {
+	if opts.HubId != "" {
+		c.remoteHostname = opts.HubId
+	} else {
+		c.remoteHostname = c.hostname
+	}
+
+	if opts.hasUser() {
+		url, newHost, err := c.findVbusUrl(&configuration{})
+		if err != nil {
+			return errors.Wrap(err, "cannot find vbus url")
+		}
+
+		// check if we need to update remote host
+		if newHost != "" {
+			c.remoteHostname = newHost
+		}
+
+		// connect with provided user info
+		c.client, err = nats.Connect(url,
+			nats.UserInfo(opts.Login, opts.Password),
+			nats.Name(opts.Login))
+		return err
+	} else {
+		config, err := c.readOrGetDefaultConfig()
+		if err != nil {
+			return errors.Wrap(err, "cannot retrieve configuration")
+		}
+
+		url, newHost, err := c.findVbusUrl(config)
+		if err != nil {
+			return errors.Wrap(err, "cannot find vbus url")
+		}
+
+		// update the config file with the new url
+		config.Vbus.Url = url
+
+		// check if we need to update remote host
+		if newHost != "" {
+			c.remoteHostname = newHost
+		}
+
+		err = c.saveConfigFile(config)
+		if err != nil {
+			return errors.Wrap(err, "cannot save configuration")
+		}
+
+		err = c.publishUser(url, config.Client)
+		if err != nil {
+			return errors.Wrap(err, "cannot create user")
+		}
+		time.Sleep(2000 * time.Millisecond)
+
+		// connect with newly created user
+		c.client, err = nats.Connect(url,
+			nats.UserInfo(config.Client.User, config.Key.Private),
+			nats.Name(config.Client.User))
+
 		return err
 	}
-
-	// update the config file with the new url
-	config.Vbus.Url = url
-
-	// check if we need to update remote host
-	if newHost != "" {
-		c.remoteHostname = newHost
-	}
-
-	err = c.saveConfigFile(config)
-	if err != nil {
-		return errors.Wrap(err, "cannot save configuration")
-	}
-
-	err = c.publishUser(url, config)
-	if err != nil {
-		return errors.Wrap(err, "cannot create user")
-	}
-
-	// connect with newly created user
-	c.client, err = nats.Connect(url,
-		nats.UserInfo(config.Client.User, config.Key.Private),
-		nats.Name(config.Client.User))
-
-	return err
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -291,21 +326,30 @@ func (c *ExtendedNatsClient) AskPermission(permission string) (bool, error) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Publish on Vbus the user described in configuration.
-func (c *ExtendedNatsClient) publishUser(url string, config *configuration) error {
+func (c *ExtendedNatsClient) publishUser(url string, config ClientConfig) error {
 	conn, err := nats.Connect(url, nats.UserInfo(anonymousUser, anonymousUser))
 	if err != nil {
 		return errors.Wrap(err, "cannot connect to client server")
 	}
 	defer conn.Close()
 
-	data := toVbus(config.Client)
+	data := toVbus(config)
 	err = conn.Publish(fmt.Sprintf("system.authorization.%s.add", c.remoteHostname), data)
 	if err != nil {
 		return errors.Wrap(err, "error while publishing")
 	}
-	time.Sleep(2000 * time.Millisecond)
 
 	return nil
+}
+
+// Create a new user on vbus
+func (c *ExtendedNatsClient) CreateUser(userConfig ClientConfig) error {
+	url, _, err := c.findVbusUrl(&configuration{}) // empty configuration
+	if err != nil {
+		return errors.Wrap(err, "cannot find vbus url")
+	}
+
+	return c.publishUser(url, userConfig)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -377,15 +421,17 @@ func (c *ExtendedNatsClient) findVbusUrl(config *configuration) (serverUrl strin
 // Configuration
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-type permConfig struct {
+// Permission configuration.
+type PermConfig struct {
 	Subscribe []string `json:"subscribe"`
 	Publish   []string `json:"publish"`
 }
 
-type clientConfig struct {
+// Hold user information
+type ClientConfig struct {
 	User        string     `json:"user"`
 	Password    string     `json:"password"`
-	Permissions permConfig `json:"permissions"`
+	Permissions PermConfig `json:"permissions"`
 }
 
 type keyConfig struct {
@@ -397,7 +443,7 @@ type vbusConfig struct {
 }
 
 type configuration struct {
-	Client clientConfig `json:"client"`
+	Client ClientConfig `json:"client"`
 	Key    keyConfig    `json:"key"`
 	Vbus   vbusConfig   `json:"vbus"`
 }
@@ -452,10 +498,10 @@ func (c *ExtendedNatsClient) getDefaultConfig() (*configuration, error) {
 	}
 
 	return &configuration{
-		Client: clientConfig{
+		Client: ClientConfig{
 			User:     fmt.Sprintf("%s.%s", c.id, c.hostname),
 			Password: string(publicKey),
-			Permissions: permConfig{
+			Permissions: PermConfig{
 				Subscribe: []string{
 					c.id,
 					fmt.Sprintf("%s.>", c.id),
