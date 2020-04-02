@@ -411,16 +411,24 @@ func (nm *NodeManager) Close() error {
 	return nil
 }
 
+// Retrieve a remote node
 func (nm *NodeManager) GetRemoteNode(parts ...string) (*NodeProxy, error) {
 	return NewNodeProxy(nm.client, "", JsonObj{}).GetNode(parts...)
 }
 
+// Retrieve a remote method
 func (nm *NodeManager) GetRemoteMethod(parts ...string) (*MethodProxy, error) {
 	return NewNodeProxy(nm.client, "", JsonObj{}).GetMethod(parts...)
 }
 
+// Retrieve a remote attribute
 func (nm *NodeManager) GetRemoteAttr(parts ...string) (*AttributeProxy, error) {
 	return NewNodeProxy(nm.client, "", JsonObj{}).GetAttribute(parts...)
+}
+
+// Retrieve a remote element (node, attribute or method)
+func (nm *NodeManager) GetRemoteElement(parts ...string) (*UnknownProxy, error) {
+	return NewNodeProxy(nm.client, "", JsonObj{}).GetElement(parts...)
 }
 
 // Expose a service identified with an uri on Vbus.

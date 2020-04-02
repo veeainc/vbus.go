@@ -102,6 +102,11 @@ func NewUnknownProxy(client *ExtendedNatsClient, path string, rawNode JsonObj) *
 	}
 }
 
+// Get raw tree.
+func (up *UnknownProxy) Tree() JsonAny {
+	return up.rawDef
+}
+
 // Is it an attribute ?
 func (up *UnknownProxy) IsAttribute() bool {
 	return isAttribute(up.rawDef)
@@ -265,6 +270,29 @@ func (np *NodeProxy) GetAttribute(parts ...string) (*AttributeProxy, error) {
 				return NewAttributeProxy(np.client, joinPath(prepend(np.GetPath(), parts)...), rawElementDef), nil
 			}
 			return nil, errors.New("Retrieved value on Vbus is not a valid json node")
+		}
+	}
+}
+
+// Retrieve a unknown element
+func (np *NodeProxy) GetElement(parts ...string) (*UnknownProxy, error) {
+	if isWildcardPath(parts...) {
+		panic("cannot use a wildcard path")
+	} else {
+		rawElementDef := getPathInObj(np.rawNode, parts...)
+		if rawElementDef != nil {
+			return NewUnknownProxy(np.client, joinPath(prepend(np.GetPath(), parts)...), rawElementDef), nil
+		} else {
+			// load from Vbus
+			resp, err := np.client.Request(joinPath(append(parts, notifGet)...), nil, WithoutHost(), WithoutId(), Timeout(2*time.Second))
+			if err != nil {
+				return nil, errors.Wrap(err, "cannot retrieve remote attribute")
+			}
+			// check if its a json object
+			if rawElementDef, ok := resp.(JsonObj); ok {
+				return NewUnknownProxy(np.client, joinPath(prepend(np.GetPath(), parts)...), rawElementDef), nil
+			}
+			return nil, errors.New("Retrieved value on Vbus is not a valid json element")
 		}
 	}
 }
