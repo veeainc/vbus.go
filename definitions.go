@@ -6,6 +6,7 @@ package vBus
 import (
 	"github.com/alecthomas/jsonschema"
 	"github.com/pkg/errors"
+	"github.com/xeipuuv/gojsonschema"
 	"reflect"
 )
 
@@ -80,15 +81,24 @@ func getDefOptions(advOpts ...defOption) DefOptions {
 // Error Definition
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Vbus error codes.
+type ErrorCode int
+
+const (
+	ErrorPathNotFound ErrorCode = 1000
+	ErrorInternal     ErrorCode = 2000
+	ErrorValidation   ErrorCode = 3000
+)
+
 // Represents a Vbus error.
 type ErrorDefinition struct { // implements iDefinition
-	code    int
+	code    ErrorCode
 	message string
-	detail  string
+	detail  interface{}
 }
 
 // Creates a new error definition.
-func NewErrorDefinition(code int, message string) *ErrorDefinition {
+func NewErrorDefinition(code ErrorCode, message string) *ErrorDefinition {
 	return &ErrorDefinition{
 		code:    code,
 		message: message,
@@ -96,7 +106,7 @@ func NewErrorDefinition(code int, message string) *ErrorDefinition {
 }
 
 // Creates a new error definition with detail.
-func NewErrorDefinitionWithDetail(code int, message string, detail string) *ErrorDefinition {
+func NewErrorDefinitionWithDetail(code ErrorCode, message string, detail interface{}) *ErrorDefinition {
 	return &ErrorDefinition{
 		code:    code,
 		message: message,
@@ -121,7 +131,7 @@ func (e *ErrorDefinition) handleGet(data interface{}, parts []string) (interface
 }
 
 func (e *ErrorDefinition) ToRepr() JsonObj {
-	if isStrEmpty(e.detail) {
+	if e.detail == nil {
 		return map[string]interface{}{
 			"code":    e.code,
 			"message": e.message,
@@ -130,21 +140,21 @@ func (e *ErrorDefinition) ToRepr() JsonObj {
 		return map[string]interface{}{
 			"code":    e.code,
 			"message": e.message,
-			"detail":  e.detail,
+			"errors":  e.detail,
 		}
 	}
 }
 
 func NewPathNotFoundError() *ErrorDefinition {
-	return NewErrorDefinition(404, "not found")
+	return NewErrorDefinition(ErrorPathNotFound, "not found")
 }
 
 func NewPathNotFoundErrorWithDetail(p string) *ErrorDefinition {
-	return NewErrorDefinitionWithDetail(404, "not found", p)
+	return NewErrorDefinitionWithDetail(ErrorPathNotFound, "not found", p)
 }
 
 func NewInternalError(err error) *ErrorDefinition {
-	return NewErrorDefinitionWithDetail(500, "internal server error", err.Error())
+	return NewErrorDefinitionWithDetail(ErrorInternal, "internal server error", err.Error())
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -324,6 +334,18 @@ func (a *AttributeDef) searchPath(parts []string) iDefinition {
 }
 
 func (a *AttributeDef) handleSet(data interface{}, parts []string) (interface{}, error) {
+	schemaLoader := gojsonschema.NewGoLoader(a.schema)
+	documentLoader := gojsonschema.NewGoLoader(data)
+	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
+	if err != nil {
+		return nil, err
+	}
+
+	if !result.Valid() {
+		log.Warnf("invalid value received for attribute %s : %v (%v)", a.uuid, data, result.Errors())
+		return nil, nil
+	}
+
 	if a.onSet != nil {
 		return invokeFunc(a.onSet, data, parts)
 	}

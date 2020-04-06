@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robpike/filter"
 	"github.com/sirupsen/logrus"
+	"github.com/xeipuuv/gojsonschema"
 	"math/big"
 	"os"
 	"reflect"
@@ -369,6 +370,21 @@ func structToJsonObj(structure json.Marshaler) JsonObj {
 		output[field] = val
 	}
 	return output
+}
+
+type goJsonErrors []gojsonschema.ResultError
+
+// Wrap gojsonschema errors to implement Golang error interface.
+type ValidationError struct {
+	goJsonErrors
+}
+
+func (v ValidationError) Error() string {
+	var messages []string
+	for _, err := range v.goJsonErrors {
+		messages = append(messages, err.String())
+	}
+	return strings.Join(messages, "\n")
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

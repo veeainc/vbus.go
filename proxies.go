@@ -5,6 +5,7 @@ package vBus
 import (
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
+	"github.com/xeipuuv/gojsonschema"
 	"time"
 )
 
@@ -165,6 +166,19 @@ func (ap *AttributeProxy) Value() interface{} {
 
 // Set remote value.
 func (ap *AttributeProxy) SetValue(value interface{}) error {
+	if hasKey(ap.rawAttr, "schema") { // validate against json schema if present
+		schemaLoader := gojsonschema.NewGoLoader(ap.rawAttr["schema"])
+		documentLoader := gojsonschema.NewGoLoader(value)
+		result, err := gojsonschema.Validate(schemaLoader, documentLoader)
+		if err != nil {
+			return err
+		}
+
+		if !result.Valid() {
+			return ValidationError{result.Errors()}
+		}
+	}
+
 	return ap.client.Publish(joinPath(ap.GetPath(), notifValueSetted), value, WithoutHost(), WithoutId())
 }
 
