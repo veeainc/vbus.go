@@ -41,7 +41,7 @@ func isNode(node interface{}) bool {
 }
 
 type SetCallback = func(data interface{}, segment []string)
-type GetCallback = func(data interface{}, segment []string)
+type GetCallback = func(data interface{}, segment []string) interface{}
 
 // Advanced Nats methods options
 type DefOptions struct {
