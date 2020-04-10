@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"io/ioutil"
 	"net"
+	"path"
 	"runtime"
 	"strings"
 	"time"
@@ -319,7 +322,7 @@ func (nm *NodeManager) DiscoverModules(timeout time.Duration) ([]ModuleInfo, err
 	return resp, nil
 }
 
-func (nm *NodeManager) Initialize() error {
+func (nm *NodeManager) Initialize(opts natsClientOptions) error {
 	// Subscribe to root path: "app-domain.app-name"
 	sub, err := nm.client.Subscribe("", func(data interface{}, segments []string) interface{} {
 		// get all nodes
@@ -354,6 +357,22 @@ func (nm *NodeManager) Initialize() error {
 		return errors.Wrap(err, "cannot subscribe to info path")
 	}
 	nm.subs = append(nm.subs, sub) // save sub
+
+	// handle static file server
+	_, err = nm.AddMethod("static", func(method, uri string, segments []string) []byte {
+		logrus.Debugf("static: received %v on %v", method, uri)
+
+		content, err := ioutil.ReadFile(path.Join(opts.StaticPath, uri))
+		if err != nil {
+			logrus.Error(err)
+			return nil
+		}
+
+		return content
+	})
+	if err != nil {
+		return errors.Wrap(err, "cannot register file server method")
+	}
 
 	return nil
 }
