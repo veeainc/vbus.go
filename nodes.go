@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
+	"github.com/robpike/filter"
 	"github.com/sirupsen/logrus"
 	"io/ioutil"
 	"net"
@@ -337,7 +338,8 @@ func (nm *NodeManager) Initialize(opts natsClientOptions) error {
 	sub, err = nm.client.Subscribe(">", func(data interface{}, segments []string) interface{} {
 		// Get a specific path
 		parts := strings.Split(segments[0], ".") // split the first segment (">") to string list.
-		if len(parts) < 2 {
+		parts = filter.Choose(parts, isStrNotEmpty).([]string) // filter empty strings
+		if len(parts) < 1 {
 			return nil // invalid path, missing event ("add", "del"...)
 		}
 
