@@ -337,7 +337,7 @@ func (nm *NodeManager) Initialize(opts natsClientOptions) error {
 	// Subscribe to all
 	sub, err = nm.client.Subscribe(">", func(data interface{}, segments []string) interface{} {
 		// Get a specific path
-		parts := strings.Split(segments[0], ".") // split the first segment (">") to string list.
+		parts := strings.Split(segments[0], ".")               // split the first segment (">") to string list.
 		parts = filter.Choose(parts, isStrNotEmpty).([]string) // filter empty strings
 		if len(parts) < 1 {
 			return nil // invalid path, missing event ("add", "del"...)
@@ -361,16 +361,16 @@ func (nm *NodeManager) Initialize(opts natsClientOptions) error {
 	nm.subs = append(nm.subs, sub) // save sub
 
 	// handle static file server
-	_, err = nm.AddMethod("static", func(method, uri string, segments []string) []byte {
+	_, err = nm.AddMethod("static", func(method, uri string, segments []string) ([]byte, error) {
 		logrus.Debugf("static: received %v on %v", method, uri)
 
 		content, err := ioutil.ReadFile(path.Join(opts.StaticPath, uri))
 		if err != nil {
 			logrus.Error(err)
-			return nil
+			return []byte{}, errors.New("file not found")
 		}
 
-		return content
+		return content, nil
 	})
 	if err != nil {
 		return errors.Wrap(err, "cannot register file server method")
@@ -409,11 +409,19 @@ func (nm *NodeManager) handleEvent(data interface{}, event string, segments ...s
 			return nil
 		}
 
-		// Internal error
 		if err != nil {
-			log.Warnf("internal error while handling %s (%v)", joinPath(segments...), err.Error())
-			return NewInternalError(err).ToRepr()
+			switch err.(type) {
+			// Internal error
+			default:
+				log.Warnf("internal error while handling %s (%v)", joinPath(segments...), err.Error())
+				return NewInternalError(err).ToRepr()
+
+			case userError:
+				log.Debugf("user side error while handling %s (%v)", joinPath(segments...), err.Error())
+				return NewUserSideError(err).ToRepr()
+			}
 		}
+
 		return ret
 	} else { // Path not found
 		log.Warnf("path not found %s", joinPath(segments...))

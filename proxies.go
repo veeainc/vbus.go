@@ -366,10 +366,12 @@ func NewMethodProxy(client *ExtendedNatsClient, path string, methodDef JsonObj) 
 
 // Call the remote method with some arguments.
 func (mp *MethodProxy) Call(args ...interface{}) (interface{}, error) {
-	return mp.client.Request(joinPath(mp.path, notifSetted), args, WithoutHost(), WithoutId())
+	return handleVbusErrorIfAny(
+		mp.client.Request(joinPath(mp.path, notifSetted), args, WithoutHost(), WithoutId()))
 }
 
 // Call the remote method with some arguments and wait for a timeout.
 func (mp *MethodProxy) CallWithTimeout(timeout time.Duration, args ...interface{}) (interface{}, error) {
-	return mp.client.Request(joinPath(mp.path, notifSetted), args, Timeout(timeout), WithoutHost(), WithoutId())
+	return handleVbusErrorIfAny(
+		mp.client.Request(joinPath(mp.path, notifSetted), args, Timeout(timeout), WithoutHost(), WithoutId()))
 }

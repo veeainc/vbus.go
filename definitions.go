@@ -87,6 +87,7 @@ type ErrorCode int
 const (
 	ErrorPathNotFound ErrorCode = 1000
 	ErrorInternal     ErrorCode = 2000
+	ErrorUserSide     ErrorCode = 2500
 	ErrorValidation   ErrorCode = 3000
 )
 
@@ -112,6 +113,20 @@ func NewErrorDefinitionWithDetail(code ErrorCode, message string, detail interfa
 		message: message,
 		detail:  detail,
 	}
+}
+
+// Parses a raw vbus node back to an error definition.
+func NewErrorFromVbus(node interface{}) *ErrorDefinition {
+	err :=  &ErrorDefinition{
+		code:    ErrorCode(node.(JsonObj)["code"].(float64)), // numeric values are float64 when unmarshalled (Go)
+		message: node.(JsonObj)["message"].(string),
+	}
+
+	if hasKey(node, "detail") {
+		err.detail = node.(JsonObj)["detail"]
+	}
+
+	return err
 }
 
 func (e *ErrorDefinition) searchPath(parts []string) iDefinition {
@@ -155,6 +170,15 @@ func NewPathNotFoundErrorWithDetail(p string) *ErrorDefinition {
 
 func NewInternalError(err error) *ErrorDefinition {
 	return NewErrorDefinitionWithDetail(ErrorInternal, "internal server error", err.Error())
+}
+
+func NewUserSideError(err error) *ErrorDefinition {
+	return NewErrorDefinitionWithDetail(ErrorUserSide, "user side error", err.Error())
+}
+
+// Tells if a row json object is an error definition
+func isErrorDefinition(node interface{}) bool {
+	return hasKey(node, "code") && hasKey(node, "message")
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -211,8 +235,16 @@ func (md *MethodDef) inspectMethod() error {
 	numIn := x.NumIn()   // Count inbound parameters
 	numOut := x.NumOut() // Count out-bounding parameters
 
-	if numOut > 1 {
-		return errors.New("MethodDef only accept callback with one return value")
+	if numOut > 2 {
+		return errors.New("MethodDef only accept callback with two or less return values")
+	}
+
+	if numOut > 1 { // second return value must be an error
+		lastOut := x.Out(numOut - 1)
+		errorInterface := reflect.TypeOf((*error)(nil)).Elem()
+		if lastOut.Kind() != reflect.Interface || !lastOut.Implements(errorInterface) {
+			return errors.New("the last return value should be an error type")
+		}
 	}
 
 	if numIn == 0 {
