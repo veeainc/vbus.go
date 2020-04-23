@@ -108,6 +108,7 @@ func (c *ExtendedNatsClient) GetId() string {
 }
 
 // Try to connect.
+// Available options: vBus.HubId(), vBus.WithUser()
 func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 	// retrieve options
 	opts := natsConnectOptions{}
@@ -342,8 +343,21 @@ func (c *ExtendedNatsClient) publishUser(url string, config ClientConfig) error 
 	return nil
 }
 
-// Create a new user on vbus
-func (c *ExtendedNatsClient) CreateUser(userConfig ClientConfig) error {
+// Create a new user on vbus.
+// Can be user with vBus.HubId() option.
+func (c *ExtendedNatsClient) CreateUser(userConfig ClientConfig, options ...natsConnectOption) error {
+	// retrieve options
+	opts := natsConnectOptions{}
+	for _, opt := range options {
+		opt(&opts)
+	}
+
+	if opts.HubId != "" {
+		c.remoteHostname = opts.HubId
+	} else {
+		c.remoteHostname = c.hostname
+	}
+
 	url, _, err := c.findVbusUrl(&configuration{}) // empty configuration
 	if err != nil {
 		return errors.Wrap(err, "cannot find vbus url")
