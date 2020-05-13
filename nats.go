@@ -156,6 +156,7 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 		if newHost != "" {
 			c.remoteHostname = newHost
 		}
+		config.Vbus.Hostname = c.remoteHostname
 
 		err = c.saveConfigFile(config)
 		if err != nil {
@@ -385,7 +386,7 @@ func (c *ExtendedNatsClient) getFromHubId(config *configuration) (url string, ne
 
 // find Vbus server - strategy 1: get url from config file
 func (c *ExtendedNatsClient) getFromConfigFile(config *configuration) (url string, newHost string, e error) {
-	return config.Vbus.Url, "", nil
+	return config.Vbus.Url, config.Vbus.Hostname, nil
 }
 
 // find vbus server  - strategy 2: get url from ENV:VBUS_URL
@@ -453,7 +454,8 @@ type keyConfig struct {
 }
 
 type vbusConfig struct {
-	Url string `json:"url"`
+	Url      string `json:"url"`
+	Hostname string `json:"hostname"`
 }
 
 type configuration struct {
