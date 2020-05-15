@@ -323,6 +323,21 @@ func (nm *NodeManager) DiscoverModules(timeout time.Duration) ([]ModuleInfo, err
 	return resp, nil
 }
 
+// A factory to create the handler for vbus static method.
+func getVbusStaticMethod(opts natsClientOptions) func(method string, uri string, segments []string) ([]byte, error) {
+	return func(method, uri string, segments []string) ([]byte, error) {
+		logrus.Debugf("static: received %v on %v", method, uri)
+
+		content, err := ioutil.ReadFile(path.Join(opts.StaticPath, uri))
+		if err != nil {
+			logrus.Error(err)
+			return []byte{}, errors.New("file not found")
+		}
+
+		return content, nil
+	}
+}
+
 func (nm *NodeManager) Initialize(opts natsClientOptions) error {
 	// Subscribe to root path: "app-domain.app-name"
 	sub, err := nm.client.Subscribe("", func(data interface{}, segments []string) interface{} {
@@ -361,17 +376,7 @@ func (nm *NodeManager) Initialize(opts natsClientOptions) error {
 	nm.subs = append(nm.subs, sub) // save sub
 
 	// handle static file server
-	_, err = nm.AddMethod("static", func(method, uri string, segments []string) ([]byte, error) {
-		logrus.Debugf("static: received %v on %v", method, uri)
-
-		content, err := ioutil.ReadFile(path.Join(opts.StaticPath, uri))
-		if err != nil {
-			logrus.Error(err)
-			return []byte{}, errors.New("file not found")
-		}
-
-		return content, nil
-	})
+	_, err = nm.AddMethod("static", getVbusStaticMethod(opts))
 	if err != nil {
 		return errors.Wrap(err, "cannot register file server method")
 	}
