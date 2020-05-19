@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robpike/filter"
 	"github.com/sirupsen/logrus"
+	"github.com/xeipuuv/gojsonschema"
 	"math/big"
 	"os"
 	"reflect"
@@ -26,7 +27,7 @@ const (
 )
 
 // Represents a Json object
-type JsonObj = map[string]interface{}
+type JsonObj = map[string]interface{} // an alias (needed for type conversion)
 
 // Represents any Json
 type JsonAny = interface{}
@@ -241,7 +242,10 @@ func isMap(v interface{}) bool {
 }
 
 // Call a method from interface{} arguments.
-// Assume only one value returned or none.
+// Assume only one value returned or one value and one error
+// function shape muste be:
+//  func(...args) value          or
+//  func(...args) (value, error)
 func invokeFunc(fn interface{}, args ...interface{}) (ret interface{}, err error) {
 	// Recover in case of panic
 	defer func() {
@@ -275,13 +279,32 @@ func invokeFunc(fn interface{}, args ...interface{}) (ret interface{}, err error
 			rargs[i] = reflect.ValueOf(a).Convert(realArgType)
 		}
 	}
-	returnVal := fnVal.Call(rargs)
+	returnVals := fnVal.Call(rargs)
 
-	if len(returnVal) > 0 {
-		ret = returnVal[0].Interface()
+	if len(returnVals) > 0 {
+		ret = returnVals[0].Interface()
+	}
+	if len(returnVals) > 1 && !returnVals[1].IsNil() {
+		err = userError{returnVals[1].Interface().(error)}
 	}
 
 	return
+}
+
+// Take return values from `fromVbus` function and
+// check if json match an ErrorDefinition object. If so, return an error instead of
+// this value.
+func handleVbusErrorIfAny(resp interface{}, err error) (interface{}, error) {
+	if err != nil { // already an error, do nothing
+		return resp, err
+	}
+
+	if isErrorDefinition(resp) { // this response is a vbus error message
+		errorDef := NewErrorFromVbus(resp)
+		return nil, VbusError{errorDef: errorDef}
+	}
+
+	return resp, err
 }
 
 // Check if two slices are equal.
@@ -369,6 +392,21 @@ func structToJsonObj(structure json.Marshaler) JsonObj {
 		output[field] = val
 	}
 	return output
+}
+
+type goJsonErrors []gojsonschema.ResultError
+
+// Wrap gojsonschema errors to implement Golang error interface.
+type ValidationError struct {
+	goJsonErrors
+}
+
+func (v ValidationError) Error() string {
+	var messages []string
+	for _, err := range v.goJsonErrors {
+		messages = append(messages, err.String())
+	}
+	return strings.Join(messages, "\n")
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

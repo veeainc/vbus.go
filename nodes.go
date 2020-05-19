@@ -3,10 +3,16 @@
 package vBus
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
+	"github.com/robpike/filter"
+	"github.com/sirupsen/logrus"
+	"io/ioutil"
 	"net"
+	"path"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -228,6 +234,18 @@ type NodeManager struct {
 	urisNode *Node
 }
 
+type ModuleStatus struct {
+	HeapSize uint64 `json:"heapSize"`
+}
+
+// Response format for module info
+type ModuleInfo struct {
+	Id       string       `json:"id"`
+	Hostname string       `json:"hostname"`
+	Client   string       `json:"client"`
+	Status   ModuleStatus `json:"status"`
+}
+
 // Creates a new NodeManager. Don't forget to defer Close()
 func NewNodeManager(nats *ExtendedNatsClient) *NodeManager {
 	return &NodeManager{
@@ -274,7 +292,58 @@ func (nm *NodeManager) Discover(natsPath string, timeout time.Duration) (*Unknow
 	return NewUnknownProxy(nm.client, natsPath, resp), nil
 }
 
-func (nm *NodeManager) Initialize() error {
+func (nm *NodeManager) DiscoverModules(timeout time.Duration) ([]ModuleInfo, error) {
+	var resp []ModuleInfo
+
+	inbox := nm.client.client.NewRespInbox()
+	sub, err := nm.client.client.Subscribe(inbox, func(msg *nats.Msg) {
+		var info ModuleInfo
+		err := json.Unmarshal(msg.Data, &info)
+		if err != nil {
+			log.Warnf("received invalid info from %s, skipping", msg.Subject)
+			return // skip
+		}
+		resp = append(resp, info)
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot subscribe to inbox")
+	}
+
+	err = nm.client.client.PublishRequest("info", inbox, toVbus(nil))
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot publish")
+	}
+
+	timer := time.NewTimer(timeout)
+	<-timer.C
+
+	_ = sub.Unsubscribe()
+	_ = sub.Drain()
+
+	return resp, nil
+}
+
+// A factory to create the handler for vbus static method.
+func getVbusStaticMethod(opts natsClientOptions) func(method string, uri string, segments []string) ([]byte, error) {
+	return func(method, uri string, segments []string) ([]byte, error) {
+		logrus.Debugf("static: received %v on %v", method, uri)
+
+		filepath := path.Join(opts.StaticPath, uri)
+		if !fileExists(filepath) {
+			filepath = path.Join(opts.StaticPath, "index.html") // assume SPA
+		}
+
+		content, err := ioutil.ReadFile(filepath)
+		if err != nil {
+			logrus.Error(err)
+			return []byte{}, errors.New("file not found")
+		}
+
+		return content, nil
+	}
+}
+
+func (nm *NodeManager) Initialize(opts natsClientOptions) error {
 	// Subscribe to root path: "app-domain.app-name"
 	sub, err := nm.client.Subscribe("", func(data interface{}, segments []string) interface{} {
 		// get all nodes
@@ -288,8 +357,9 @@ func (nm *NodeManager) Initialize() error {
 	// Subscribe to all
 	sub, err = nm.client.Subscribe(">", func(data interface{}, segments []string) interface{} {
 		// Get a specific path
-		parts := strings.Split(segments[0], ".") // split the first segment (">") to string list.
-		if len(parts) < 2 {
+		parts := strings.Split(segments[0], ".")               // split the first segment (">") to string list.
+		parts = filter.Choose(parts, isStrNotEmpty).([]string) // filter empty strings
+		if len(parts) < 1 {
 			return nil // invalid path, missing event ("add", "del"...)
 		}
 
@@ -300,7 +370,37 @@ func (nm *NodeManager) Initialize() error {
 		return errors.Wrap(err, "cannot subscribe to all")
 	}
 	nm.subs = append(nm.subs, sub) // save sub
+
+	// Subscribe to generic info path
+	sub, err = nm.client.Subscribe("info", func(data interface{}, segments []string) interface{} {
+		return nm.getModuleInfo()
+	}, WithoutHost(), WithoutId())
+	if err != nil {
+		return errors.Wrap(err, "cannot subscribe to info path")
+	}
+	nm.subs = append(nm.subs, sub) // save sub
+
+	// handle static file server
+	_, err = nm.AddMethod("static", getVbusStaticMethod(opts))
+	if err != nil {
+		return errors.Wrap(err, "cannot register file server method")
+	}
+
 	return nil
+}
+
+func (nm *NodeManager) getModuleInfo() ModuleInfo {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	return ModuleInfo{
+		Id:       nm.client.GetId(),
+		Hostname: nm.client.GetHostname(),
+		Client:   "golang",
+		Status: ModuleStatus{
+			HeapSize: m.HeapAlloc,
+		},
+	}
 }
 
 // Handle incoming get requests.
@@ -319,11 +419,19 @@ func (nm *NodeManager) handleEvent(data interface{}, event string, segments ...s
 			return nil
 		}
 
-		// Internal error
 		if err != nil {
-			log.Warnf("internal error while handling %s (%v)", joinPath(segments...), err.Error())
-			return NewInternalError(err).ToRepr()
+			switch err.(type) {
+			// Internal error
+			default:
+				log.Warnf("internal error while handling %s (%v)", joinPath(segments...), err.Error())
+				return NewInternalError(err).ToRepr()
+
+			case userError:
+				log.Debugf("user side error while handling %s (%v)", joinPath(segments...), err.Error())
+				return NewUserSideError(err).ToRepr()
+			}
 		}
+
 		return ret
 	} else { // Path not found
 		log.Warnf("path not found %s", joinPath(segments...))
@@ -342,16 +450,24 @@ func (nm *NodeManager) Close() error {
 	return nil
 }
 
+// Retrieve a remote node
 func (nm *NodeManager) GetRemoteNode(parts ...string) (*NodeProxy, error) {
 	return NewNodeProxy(nm.client, "", JsonObj{}).GetNode(parts...)
 }
 
+// Retrieve a remote method
 func (nm *NodeManager) GetRemoteMethod(parts ...string) (*MethodProxy, error) {
 	return NewNodeProxy(nm.client, "", JsonObj{}).GetMethod(parts...)
 }
 
+// Retrieve a remote attribute
 func (nm *NodeManager) GetRemoteAttr(parts ...string) (*AttributeProxy, error) {
 	return NewNodeProxy(nm.client, "", JsonObj{}).GetAttribute(parts...)
+}
+
+// Retrieve a remote element (node, attribute or method)
+func (nm *NodeManager) GetRemoteElement(parts ...string) (*UnknownProxy, error) {
+	return NewNodeProxy(nm.client, "", JsonObj{}).GetElement(parts...)
 }
 
 // Expose a service identified with an uri on Vbus.

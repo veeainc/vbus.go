@@ -5,6 +5,7 @@ package vBus
 import (
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
+	"github.com/xeipuuv/gojsonschema"
 	"time"
 )
 
@@ -102,6 +103,11 @@ func NewUnknownProxy(client *ExtendedNatsClient, path string, rawNode JsonObj) *
 	}
 }
 
+// Get raw tree.
+func (up *UnknownProxy) Tree() JsonAny {
+	return up.rawDef
+}
+
 // Is it an attribute ?
 func (up *UnknownProxy) IsAttribute() bool {
 	return isAttribute(up.rawDef)
@@ -160,6 +166,19 @@ func (ap *AttributeProxy) Value() interface{} {
 
 // Set remote value.
 func (ap *AttributeProxy) SetValue(value interface{}) error {
+	if hasKey(ap.rawAttr, "schema") { // validate against json schema if present
+		schemaLoader := gojsonschema.NewGoLoader(ap.rawAttr["schema"])
+		documentLoader := gojsonschema.NewGoLoader(value)
+		result, err := gojsonschema.Validate(schemaLoader, documentLoader)
+		if err != nil {
+			return err
+		}
+
+		if !result.Valid() {
+			return ValidationError{result.Errors()}
+		}
+	}
+
 	return ap.client.Publish(joinPath(ap.GetPath(), notifValueSetted), value, WithoutHost(), WithoutId())
 }
 
@@ -269,6 +288,29 @@ func (np *NodeProxy) GetAttribute(parts ...string) (*AttributeProxy, error) {
 	}
 }
 
+// Retrieve a unknown element
+func (np *NodeProxy) GetElement(parts ...string) (*UnknownProxy, error) {
+	if isWildcardPath(parts...) {
+		panic("cannot use a wildcard path")
+	} else {
+		rawElementDef := getPathInObj(np.rawNode, parts...)
+		if rawElementDef != nil {
+			return NewUnknownProxy(np.client, joinPath(prepend(np.GetPath(), parts)...), rawElementDef), nil
+		} else {
+			// load from Vbus
+			resp, err := np.client.Request(joinPath(append(parts, notifGet)...), nil, WithoutHost(), WithoutId(), Timeout(2*time.Second))
+			if err != nil {
+				return nil, errors.Wrap(err, "cannot retrieve remote attribute")
+			}
+			// check if its a json object
+			if rawElementDef, ok := resp.(JsonObj); ok {
+				return NewUnknownProxy(np.client, joinPath(prepend(np.GetPath(), parts)...), rawElementDef), nil
+			}
+			return nil, errors.New("Retrieved value on Vbus is not a valid json element")
+		}
+	}
+}
+
 // Retrieve all elements contained in this node.
 func (np *NodeProxy) Elements() map[string]*UnknownProxy {
 	elements := make(map[string]*UnknownProxy)
@@ -324,10 +366,12 @@ func NewMethodProxy(client *ExtendedNatsClient, path string, methodDef JsonObj) 
 
 // Call the remote method with some arguments.
 func (mp *MethodProxy) Call(args ...interface{}) (interface{}, error) {
-	return mp.client.Request(joinPath(mp.path, notifSetted), args, WithoutHost(), WithoutId())
+	return handleVbusErrorIfAny(
+		mp.client.Request(joinPath(mp.path, notifSetted), args, WithoutHost(), WithoutId()))
 }
 
 // Call the remote method with some arguments and wait for a timeout.
 func (mp *MethodProxy) CallWithTimeout(timeout time.Duration, args ...interface{}) (interface{}, error) {
-	return mp.client.Request(joinPath(mp.path, notifSetted), args, Timeout(timeout), WithoutHost(), WithoutId())
+	return handleVbusErrorIfAny(
+		mp.client.Request(joinPath(mp.path, notifSetted), args, Timeout(timeout), WithoutHost(), WithoutId()))
 }
