@@ -328,7 +328,12 @@ func getVbusStaticMethod(opts natsClientOptions) func(method string, uri string,
 	return func(method, uri string, segments []string) ([]byte, error) {
 		logrus.Debugf("static: received %v on %v", method, uri)
 
-		content, err := ioutil.ReadFile(path.Join(opts.StaticPath, uri))
+		filepath := path.Join(opts.StaticPath, uri)
+		if !fileExists(filepath) {
+			filepath = path.Join(opts.StaticPath, "index.html") // assume SPA
+		}
+
+		content, err := ioutil.ReadFile(filepath)
 		if err != nil {
 			logrus.Error(err)
 			return []byte{}, errors.New("file not found")
