@@ -21,6 +21,21 @@ func TestInvoke(t *testing.T) {
 	assert.Equal(t, ret, 42)
 }
 
+func funcWithArray(arr JsonByteArray, segments []string) int {
+	return 42
+}
+
+func TestInvoke_array(t *testing.T) {
+	// create args from a Json string
+	argsJson := `[[1,2,3]]`
+	var args []interface{}
+	_ = json.Unmarshal([]byte(argsJson), &args)
+
+	ret, err := invokeFunc(funcWithArray, append(args, []string{"foo", "bar"})...)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, ret, 42)
+}
+
 func TestGetPathInObj(t *testing.T) {
 	obj := JsonObj{
 		"name": JsonObj{
@@ -40,4 +55,20 @@ func TestFromVbus(t *testing.T) {
 	data := []byte{}
 	_, err := fromVbus(data)
 	assert.NilError(t, err)
+}
+
+func TestJsonByteArray_MarshalJSON(t *testing.T) {
+	array := JsonByteArray{1, 2, 3}
+	str := "[1,2,3]"
+
+	data, _ := array.MarshalJSON()
+	assert.Equal(t, string(data), str)
+}
+
+func TestJsonByteArray_UnmarshalJSON(t *testing.T) {
+	//str := "[1,2,3]"
+	array := JsonByteArray{1, 2, 3}
+
+	data, _ := array.MarshalJSON()
+	assert.Equal(t, string(data), "[1,2,3]")
 }
