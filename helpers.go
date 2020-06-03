@@ -172,7 +172,7 @@ func zeroconfSearch() (url string, newHost string, e error) {
 
 	select {
 	case firstservice := <-serviceList:
-		routesStr := "client://" + firstservice.AddrIPv4[0].String() + ":" + strconv.Itoa(firstservice.Port)
+		routesStr := "nats://" + firstservice.AddrIPv4[0].String() + ":" + strconv.Itoa(firstservice.Port)
 		log.Println("vbus url discovered is: " + routesStr)
 		if testVbusUrl(routesStr) == true {
 			url = routesStr
