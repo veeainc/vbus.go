@@ -50,15 +50,12 @@ func fromVbus(data []byte) (interface{}, error) {
 		return nil, nil
 	}
 
-	if data != nil {
-		var input interface{}
-		err := json.Unmarshal(data, &input)
-		if err != nil {
-			return nil, errors.Wrap(err, "invalid json")
-		}
-		return input, nil
+	var input interface{}
+	err := json.Unmarshal(data, &input)
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid json")
 	}
-	return nil, nil
+	return input, nil
 }
 
 func mergeJsonObjs(obj ...JsonObj) JsonObj {
@@ -273,10 +270,21 @@ func invokeFunc(fn interface{}, args ...interface{}) (ret interface{}, err error
 	for i, a := range args {
 		realArgType := fnType.In(i) // The real arg type
 
-		if a == nil {
-			rargs[i] = reflect.Zero(reflect.TypeOf((*error)(nil)).Elem()) // create a nil arg
-		} else {
-			rargs[i] = reflect.ValueOf(a).Convert(realArgType)
+		// handle special types
+		switch realArgType {
+		case reflect.TypeOf((JsonByteArray)(nil)):
+			val := JsonByteArray{}
+			if err := val.Unmarshall(a); err != nil {
+				return nil, err
+			}
+			rargs[i] = reflect.ValueOf(val)
+			break
+		default:
+			if a == nil {
+				rargs[i] = reflect.Zero(reflect.TypeOf((*error)(nil)).Elem()) // create a nil arg
+			} else {
+				rargs[i] = reflect.ValueOf(a).Convert(realArgType)
+			}
 		}
 	}
 	returnVals := fnVal.Call(rargs)
@@ -413,6 +421,11 @@ func (v ValidationError) Error() string {
 // Format
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+type Unmarshaller interface {
+	Unmarshall(value interface{}) error
+}
+
+
 // Utility type to force conversion of byte[] to a Json array.
 type JsonByteArray []uint8
 
@@ -424,4 +437,16 @@ func (u JsonByteArray) MarshalJSON() ([]byte, error) {
 		result = strings.Join(strings.Fields(fmt.Sprintf("%d", u)), ",")
 	}
 	return []byte(result), nil
+}
+
+func (u *JsonByteArray) Unmarshall(value interface{}) error {
+	if arr, ok := value.([]interface{}); ok {
+		b := make([]uint8, len(arr))
+		for i := range arr {
+			b[i] = uint8(arr[i].(float64))
+		}
+		*u = b
+		return nil
+	}
+	return errors.New("not an array")
 }
