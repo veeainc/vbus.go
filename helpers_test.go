@@ -64,11 +64,3 @@ func TestJsonByteArray_MarshalJSON(t *testing.T) {
 	data, _ := array.MarshalJSON()
 	assert.Equal(t, string(data), str)
 }
-
-func TestJsonByteArray_UnmarshalJSON(t *testing.T) {
-	//str := "[1,2,3]"
-	array := JsonByteArray{1, 2, 3}
-
-	data, _ := array.MarshalJSON()
-	assert.Equal(t, string(data), "[1,2,3]")
-}
