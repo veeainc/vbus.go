@@ -6,13 +6,6 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"github.com/godbus/dbus"
-	"github.com/grandcat/zeroconf"
-	"github.com/nats-io/nats.go"
-	"github.com/pkg/errors"
-	"github.com/robpike/filter"
-	"github.com/sirupsen/logrus"
-	"github.com/xeipuuv/gojsonschema"
 	"math/big"
 	"os"
 	"reflect"
@@ -20,6 +13,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/godbus/dbus"
+	"github.com/grandcat/zeroconf"
+	"github.com/nats-io/nats.go"
+	"github.com/pkg/errors"
+	"github.com/robpike/filter"
+	"github.com/sirupsen/logrus"
+	"github.com/xeipuuv/gojsonschema"
 )
 
 const (
@@ -140,11 +141,21 @@ func isHub() bool {
 	return true
 }
 
-func zeroconfSearch() (url string, newHost string, e error) {
+// convert dns text record to a Go dictionary
+func dnsTextToDict(text []string) map[string]string {
+	res := make(map[string]string)
+	for _, v := range text {
+		parts := strings.Split(v, "=")
+		res[parts[0]] = parts[1]
+	}
+	return res
+}
+
+func zeroconfSearch() (urlToTest []string, newHost string, e error) {
 	log.Debug("find vbus on network\n")
 	resolver, err := zeroconf.NewResolver(nil)
 	if err != nil {
-		return "", "", errors.Wrap(err, "Failed to initialize resolver")
+		return []string{}, "", errors.Wrap(err, "Failed to initialize resolver")
 	}
 
 	serviceList := make(chan *zeroconf.ServiceEntry, 1)
@@ -165,33 +176,30 @@ func zeroconfSearch() (url string, newHost string, e error) {
 	defer cancel()
 	err = resolver.Browse(ctx, "_nats._tcp", "local.", entries)
 	if err != nil {
-		return "", "", errors.Wrap(err, "Failed to browse")
+		return []string{}, "", errors.Wrap(err, "Failed to browse")
 	}
 
 	<-ctx.Done()
 
 	select {
-	case firstservice := <-serviceList:
-		routesStr := "nats://" + firstservice.AddrIPv4[0].String() + ":" + strconv.Itoa(firstservice.Port)
-		log.Println("vbus url discovered is: " + routesStr)
-		if testVbusUrl(routesStr) == true {
-			url = routesStr
-			log.Debug("url from discovery ok: " + routesStr + "\n")
-			hostIPParsed := strings.Split(firstservice.Text[0], "=")
-			if hostIPParsed[0] == "host" {
-				hostIP := hostIPParsed[1]
-				log.Debug("hostIP retrieved from mDns: " + hostIP)
-			}
-			if isHub() == false {
-				// try to retrieve real VH hostname case we are not on a VH
-				hostnameParsed := strings.Split(firstservice.Text[1], "=")
-				if hostnameParsed[0] == "hostname" {
-					newHost = hostnameParsed[1]
-					log.Debug("hostname retrived from mDns: " + newHost)
+	case service := <-serviceList:
+		if service.ServiceRecord.Instance == "vBus" {
+			// create a first route to test using properties
+			properties := dnsTextToDict(service.Text)
+			if host, ok := properties["host"]; ok {
+				if hostname, ok := properties["hostname"]; ok {
+					log.Debug("hostname retrieved from mDns: " + hostname)
+					urlToTest = append(urlToTest, fmt.Sprintf("nats://%v:%v", host, strconv.Itoa(service.Port)))
+					newHost = hostname
 				}
 			}
-		} else {
-			log.Debug("url from discovery hs: " + routesStr + "\n")
+
+			// and a second one using service ip address
+			if len(service.AddrIPv4) > 0 {
+				url := fmt.Sprintf("nats://%v:%v", service.AddrIPv4[0].String(), strconv.Itoa(service.Port))
+				log.Println("vbus urlToTest discovered is: " + url)
+				urlToTest = append(urlToTest, url)
+			}
 		}
 	default:
 		log.Println("no service found")
@@ -424,7 +432,6 @@ func (v ValidationError) Error() string {
 type Unmarshaller interface {
 	Unmarshall(value interface{}) error
 }
-
 
 // Utility type to force conversion of byte[] to a Json array.
 type JsonByteArray []uint8

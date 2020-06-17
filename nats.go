@@ -371,41 +371,41 @@ func (c *ExtendedNatsClient) CreateUser(userConfig ClientConfig, options ...nats
 // Find server url strategies
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // find Vbus server - strategy 0: get from argument
-func (c *ExtendedNatsClient) getFromHubId(config *configuration) (url string, newHost string, e error) {
+func (c *ExtendedNatsClient) getFromHubId(config *configuration) (url []string, newHost string, e error) {
 	if ret := net.ParseIP(c.remoteHostname); ret != nil {
 		// already an ip address
-		return fmt.Sprintf("nats://%s:21400", c.remoteHostname), "", nil
+		return []string{fmt.Sprintf("nats://%s:21400", c.remoteHostname)}, "", nil
 	} else {
 		addr, err := net.LookupIP(c.remoteHostname) // resolve hostname
 		if err != nil {
-			return "", "", errors.Wrap(err, "Cannot resolve hostname")
+			return []string{}, "", errors.Wrap(err, "Cannot resolve hostname")
 		}
-		return fmt.Sprintf("nats://%v:21400", addr[0]), "", nil
+		return []string{fmt.Sprintf("nats://%v:21400", addr[0])}, "", nil
 	}
 }
 
 // find Vbus server - strategy 1: get url from config file
-func (c *ExtendedNatsClient) getFromConfigFile(config *configuration) (url string, newHost string, e error) {
-	return config.Vbus.Url, config.Vbus.Hostname, nil
+func (c *ExtendedNatsClient) getFromConfigFile(config *configuration) (url []string, newHost string, e error) {
+	return []string{config.Vbus.Url}, config.Vbus.Hostname, nil
 }
 
 // find vbus server  - strategy 2: get url from ENV:VBUS_URL
-func (c *ExtendedNatsClient) getFromEnv(config *configuration) (url string, newHost string, e error) {
-	return c.env[envVbusUrl], "", nil
+func (c *ExtendedNatsClient) getFromEnv(config *configuration) (url []string, newHost string, e error) {
+	return []string{c.env[envVbusUrl]}, "", nil
 }
 
 // find vbus server  - strategy 3: try default url client://hostname:21400
-func (c *ExtendedNatsClient) getDefault(config *configuration) (url string, newHost string, e error) {
-	return fmt.Sprintf("nats://%s.veeamesh.local:21400", c.hostname), "", nil
+func (c *ExtendedNatsClient) getDefault(config *configuration) (url []string, newHost string, e error) {
+	return []string{fmt.Sprintf("nats://%s.veeamesh.local:21400", c.hostname)}, "", nil
 }
 
 // find vbus server  - strategy 4: find it using avahi
-func (c *ExtendedNatsClient) getFromZeroconf(config *configuration) (url string, newHost string, e error) {
+func (c *ExtendedNatsClient) getFromZeroconf(config *configuration) (url []string, newHost string, e error) {
 	return zeroconfSearch()
 }
 
 func (c *ExtendedNatsClient) findVbusUrl(config *configuration) (serverUrl string, newHost string, e error) {
-	findServerUrlStrategies := []func(config *configuration) (url string, newHost string, e error){
+	findServerUrlStrategies := []func(config *configuration) (url []string, newHost string, e error){
 		c.getFromHubId,
 		c.getFromConfigFile,
 		c.getFromEnv,
@@ -414,14 +414,23 @@ func (c *ExtendedNatsClient) findVbusUrl(config *configuration) (serverUrl strin
 	}
 
 	success := false
+	var urls []string
+
 	for _, strategy := range findServerUrlStrategies {
-		serverUrl, newHost, e = strategy(config)
-		if testVbusUrl(serverUrl) {
-			log.Debugf("url found using strategy '%s': %s", getFunctionName(strategy), serverUrl)
-			success = true
+		if success {
 			break
-		} else {
-			log.Debugf("cannot find a valid url using strategy '%s': %s", getFunctionName(strategy), serverUrl)
+		}
+
+		urls, newHost, e = strategy(config)
+		for _, url := range urls {
+			if testVbusUrl(url) {
+				log.Debugf("url found using strategy '%s': %s", getFunctionName(strategy), serverUrl)
+				success = true
+				serverUrl = url
+				break
+			} else {
+				log.Debugf("cannot find a valid url using strategy '%s': %s", getFunctionName(strategy), serverUrl)
+			}
 		}
 	}
 
