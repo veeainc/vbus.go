@@ -75,7 +75,7 @@ func (p *ProxyBase) subscribeToEvent(cb ProxySubCallback, event string, parts ..
 	natsPath := joinPath(p.path, joinPath(parts...), event)
 
 	sub, err := p.client.Subscribe(natsPath, func(rawNode interface{}, segments []string) interface{} {
-		if js, ok := rawNode.(JsonObj); ok {
+		if js, ok := rawNode.(JsonAny); ok {
 			node := NewUnknownProxy(p.client, p.path, js)
 			cb(node, segments...)
 		}
@@ -97,7 +97,7 @@ type UnknownProxy struct { // implements IProxy
 	*ProxyBase
 }
 
-func NewUnknownProxy(client *ExtendedNatsClient, path string, rawNode JsonObj) *UnknownProxy {
+func NewUnknownProxy(client *ExtendedNatsClient, path string, rawNode JsonAny) *UnknownProxy {
 	return &UnknownProxy{
 		ProxyBase: NewProxyBase(client, path, rawNode),
 	}
