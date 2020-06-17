@@ -10,7 +10,8 @@ type Client struct {
 
 // ExtendedNatsClient options.
 type natsClientOptions struct {
-	StaticPath string
+	StaticPath    string
+	HasStaticPath bool
 }
 
 // Option is a function on the options for a connection.
@@ -20,12 +21,15 @@ type natsClientOption func(*natsClientOptions)
 func WithStaticPath(staticPath string) natsClientOption {
 	return func(o *natsClientOptions) {
 		o.StaticPath = staticPath
+		o.HasStaticPath = true
 	}
 }
 
 func getClientOptions(opt ...natsClientOption) natsClientOptions {
+	// set default values
 	opts := natsClientOptions{
-		StaticPath: "./static",
+		StaticPath:    "",
+		HasStaticPath: false,
 	}
 	for _, o := range opt {
 		o(&opts)
@@ -36,10 +40,11 @@ func getClientOptions(opt ...natsClientOption) natsClientOptions {
 // Creates a new client with options.
 func NewClient(domain, appId string, opt ...natsClientOption) *Client {
 	nats := NewExtendedNatsClient(domain, appId)
+	opts := getClientOptions(opt...)
 	return &Client{
 		nats:        nats,
-		NodeManager: NewNodeManager(nats),
-		options:     getClientOptions(opt...),
+		NodeManager: NewNodeManager(nats, opts),
+		options:     opts,
 	}
 }
 
@@ -53,7 +58,7 @@ func (c *Client) Connect(options ...natsConnectOption) error {
 		return err
 	}
 
-	return c.Initialize(c.options)
+	return c.Initialize()
 }
 
 func (c *Client) AskPermission(permission string) (bool, error) {

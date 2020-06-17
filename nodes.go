@@ -5,16 +5,17 @@ package vBus
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/nats-io/nats.go"
-	"github.com/pkg/errors"
-	"github.com/robpike/filter"
-	"github.com/sirupsen/logrus"
 	"io/ioutil"
 	"net"
 	"path"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/nats-io/nats.go"
+	"github.com/pkg/errors"
+	"github.com/robpike/filter"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -230,6 +231,8 @@ func NewMethod(nats *ExtendedNatsClient, uuid string, definition *MethodDef, par
 // The NodeManager handle high level action like discovering nodes.
 type NodeManager struct {
 	*Node
+	//
+	opts     natsClientOptions
 	subs     []*nats.Subscription
 	urisNode *Node
 }
@@ -240,16 +243,18 @@ type ModuleStatus struct {
 
 // Response format for module info
 type ModuleInfo struct {
-	Id       string       `json:"id"`
-	Hostname string       `json:"hostname"`
-	Client   string       `json:"client"`
-	Status   ModuleStatus `json:"status"`
+	Id             string       `json:"id"`
+	Hostname       string       `json:"hostname"`
+	Client         string       `json:"client"`
+	HasStaticFiles bool         `json:"hasStaticFiles"`
+	Status         ModuleStatus `json:"status"`
 }
 
 // Creates a new NodeManager. Don't forget to defer Close()
-func NewNodeManager(nats *ExtendedNatsClient) *NodeManager {
+func NewNodeManager(nats *ExtendedNatsClient, opts natsClientOptions) *NodeManager {
 	return &NodeManager{
 		Node:     NewNode(nats, "", NewNodeDef(RawNode{}), nil),
+		opts:     opts,
 		urisNode: nil,
 	}
 }
@@ -343,7 +348,7 @@ func getVbusStaticMethod(opts natsClientOptions) func(method string, uri string,
 	}
 }
 
-func (nm *NodeManager) Initialize(opts natsClientOptions) error {
+func (nm *NodeManager) Initialize() error {
 	// Subscribe to root path: "app-domain.app-name"
 	sub, err := nm.client.Subscribe("", func(data interface{}, segments []string) interface{} {
 		// get all nodes
@@ -381,9 +386,11 @@ func (nm *NodeManager) Initialize(opts natsClientOptions) error {
 	nm.subs = append(nm.subs, sub) // save sub
 
 	// handle static file server
-	_, err = nm.AddMethod("static", getVbusStaticMethod(opts))
-	if err != nil {
-		return errors.Wrap(err, "cannot register file server method")
+	if nm.opts.HasStaticPath {
+		_, err = nm.AddMethod("static", getVbusStaticMethod(nm.opts))
+		if err != nil {
+			return errors.Wrap(err, "cannot register file server method")
+		}
 	}
 
 	return nil
@@ -394,9 +401,10 @@ func (nm *NodeManager) getModuleInfo() ModuleInfo {
 	runtime.ReadMemStats(&m)
 
 	return ModuleInfo{
-		Id:       nm.client.GetId(),
-		Hostname: nm.client.GetHostname(),
-		Client:   "golang",
+		Id:             nm.client.GetId(),
+		Hostname:       nm.client.GetHostname(),
+		Client:         "golang",
+		HasStaticFiles: nm.opts.HasStaticPath,
 		Status: ModuleStatus{
 			HeapSize: m.HeapAlloc,
 		},
