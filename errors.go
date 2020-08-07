@@ -17,6 +17,6 @@ type VbusError struct {
 }
 
 func (v VbusError) Error() string {
-	return fmt.Sprintf("vbus error: %s (%d)", v.errorDef.message, v.errorDef.code)
+	return fmt.Sprintf("vbus error: %s (%d) - %v", v.errorDef.message, v.errorDef.code, v.errorDef.detail)
 }
 
