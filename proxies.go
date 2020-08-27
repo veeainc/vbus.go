@@ -189,7 +189,7 @@ func (ap *AttributeProxy) ReadValue() (interface{}, error) {
 
 // Get remote value with timeout.
 func (ap *AttributeProxy) ReadValueWithTimeout(timeout time.Duration) (interface{}, error) {
-	return ap.client.Request(joinPath(ap.GetPath(), notifValueGet), Timeout(timeout), WithoutHost(), WithoutId())
+	return ap.client.Request(joinPath(ap.GetPath(), notifValueGet), nil, Timeout(timeout), WithoutHost(), WithoutId())
 }
 
 // Subscribe to the set event.
