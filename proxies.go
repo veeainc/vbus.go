@@ -301,7 +301,7 @@ func (np *NodeProxy) GetAttribute(parts ...string) (*AttributeProxy, error) {
 }
 
 // Retrieve a unknown element
-func (np *NodeProxy) GetElement(parts ...string) (*UnknownProxy, error) {
+func (np *NodeProxy) GetElementWithTimeout(timeout time.Duration, parts ...string) (*UnknownProxy, error) {
 	if isWildcardPath(parts...) {
 		panic("cannot use a wildcard path")
 	} else {
@@ -310,7 +310,7 @@ func (np *NodeProxy) GetElement(parts ...string) (*UnknownProxy, error) {
 			return NewUnknownProxy(np.client, joinPath(prepend(np.GetPath(), parts)...), rawElementDef), nil
 		} else {
 			// load from Vbus
-			resp, err := np.client.Request(joinPath(append(parts, notifGet)...), nil, WithoutHost(), WithoutId(), Timeout(2*time.Second))
+			resp, err := np.client.Request(joinPath(append(parts, notifGet)...), nil, WithoutHost(), WithoutId(), Timeout(timeout))
 			if err != nil {
 				return nil, errors.Wrap(err, "cannot retrieve remote attribute")
 			}
@@ -321,6 +321,11 @@ func (np *NodeProxy) GetElement(parts ...string) (*UnknownProxy, error) {
 			return nil, errors.New("Retrieved value on Vbus is not a valid json element")
 		}
 	}
+}
+
+// Retrieve a unknown element
+func (np *NodeProxy) GetElement(parts ...string) (*UnknownProxy, error) {
+	return np.GetElementWithTimeout(2 * time.Second, parts...)
 }
 
 // Retrieve all elements contained in this node.

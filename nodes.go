@@ -480,6 +480,11 @@ func (nm *NodeManager) GetRemoteElement(parts ...string) (*UnknownProxy, error) 
 	return NewNodeProxy(nm.client, "", JsonObj{}).GetElement(parts...)
 }
 
+// Retrieve a remote element with timeout (node, attribute or method)
+func (nm *NodeManager) GetRemoteElementWithTimeout(timeout time.Duration, parts ...string) (*UnknownProxy, error) {
+	return NewNodeProxy(nm.client, "", JsonObj{}).GetElementWithTimeout(timeout, parts...)
+}
+
 // Expose a service identified with an uri on Vbus.
 func (nm *NodeManager) Expose(name, protocol string, port int, path string) error {
 	// resolve current hostname to get ip address
