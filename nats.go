@@ -25,6 +25,8 @@ const (
 	defaultCost   = 11
 )
 
+var _natsLog = getNamedLogger()
+
 type ExtendedNatsClient struct {
 	hostname       string            // client hostname
 	remoteHostname string            // remote client server hostname
@@ -277,7 +279,7 @@ func (c *ExtendedNatsClient) Subscribe(base string, cb NatsCallback, advOpts ...
 
 		res, err := invokeFunc(cb, data, m[1:])
 		if err != nil {
-			log.Warnf("cannot call user callback: %v", err.Error())
+			_natsLog.Warnf("cannot call user callback: %v", err.Error())
 			return
 		}
 
@@ -285,7 +287,7 @@ func (c *ExtendedNatsClient) Subscribe(base string, cb NatsCallback, advOpts ...
 		if isStrNotEmpty(msg.Reply) {
 			err = c.client.Publish(msg.Reply, toVbus(res))
 			if err != nil {
-				log.Warnf("error while sending response: %v", err.Error())
+				_natsLog.Warnf("error while sending response: %v", err.Error())
 				return
 			}
 		}
@@ -424,12 +426,12 @@ func (c *ExtendedNatsClient) findVbusUrl(config *configuration) (serverUrl strin
 		urls, newHost, e = strategy(config)
 		for _, url := range urls {
 			if testVbusUrl(url) {
-				log.Debugf("url found using strategy '%s': %s", getFunctionName(strategy), serverUrl)
+				_natsLog.Debugf("url found using strategy '%s': %s", getFunctionName(strategy), serverUrl)
 				success = true
 				serverUrl = url
 				break
 			} else {
-				log.Debugf("cannot find a valid url using strategy '%s': %s", getFunctionName(strategy), serverUrl)
+				_natsLog.Debugf("cannot find a valid url using strategy '%s': %s", getFunctionName(strategy), serverUrl)
 			}
 		}
 	}
@@ -483,10 +485,10 @@ func (c *ExtendedNatsClient) readOrGetDefaultConfig() (*configuration, error) {
 		}
 	}
 
-	log.Debug("check if we already have a Vbus config file in %s" + c.rootFolder)
+	_natsLog.Debug("check if we already have a Vbus config file in %s" + c.rootFolder)
 	configFile := path.Join(c.rootFolder, c.id) + ".conf"
 	if fileExists(configFile) {
-		log.Debugf("load existing configuration file for %s", c.id)
+		_natsLog.Debugf("load existing configuration file for %s", c.id)
 		jsonFile, err := os.Open(configFile)
 		if err != nil {
 			return nil, errors.Wrap(err, "cannot open config file")
@@ -504,14 +506,14 @@ func (c *ExtendedNatsClient) readOrGetDefaultConfig() (*configuration, error) {
 		}
 		return &config, nil
 	} else {
-		log.Debugf("create new configuration file for %s", c.id)
+		_natsLog.Debugf("create new configuration file for %s", c.id)
 		return c.getDefaultConfig()
 	}
 }
 
 // Creates a default configuration object.
 func (c *ExtendedNatsClient) getDefaultConfig() (*configuration, error) {
-	log.Debugf("create new configuration file for %s", c.id)
+	_natsLog.Debugf("create new configuration file for %s", c.id)
 	password, err := generatePassword()
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot generate password")

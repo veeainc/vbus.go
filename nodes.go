@@ -28,6 +28,8 @@ const (
 	exposeNodeUuid   = "uris"
 )
 
+var _nodesLog = getNamedLogger()
+
 // A Vbus connected element that send updates.
 type IElement interface {
 	getDefinition() iDefinition
@@ -267,13 +269,13 @@ func (nm *NodeManager) Discover(natsPath string, timeout time.Duration) (*Unknow
 	sub, err := nm.client.client.Subscribe(inbox, func(msg *nats.Msg) {
 		data, err := fromVbus(msg.Data)
 		if err != nil {
-			log.Warnf("received invalid node from %s", msg.Subject)
+			_nodesLog.Warnf("received invalid node from %s", msg.Subject)
 			return // skip
 		}
 
 		o, ok := data.(JsonObj)
 		if !ok {
-			log.Warn("received data is not a json object")
+			_nodesLog.Warn("received data is not a json object")
 			return // skip
 		}
 
@@ -305,7 +307,7 @@ func (nm *NodeManager) DiscoverModules(timeout time.Duration) ([]ModuleInfo, err
 		var info ModuleInfo
 		err := json.Unmarshal(msg.Data, &info)
 		if err != nil {
-			log.Warnf("received invalid info from %s, skipping", msg.Subject)
+			_nodesLog.Warnf("received invalid info from %s, skipping", msg.Subject)
 			return // skip
 		}
 		resp = append(resp, info)
@@ -431,18 +433,18 @@ func (nm *NodeManager) handleEvent(data interface{}, event string, segments ...s
 			switch err.(type) {
 			// Internal error
 			default:
-				log.Warnf("internal error while handling %s (%v)", joinPath(segments...), err.Error())
+				_nodesLog.Warnf("internal error while handling %s (%v)", joinPath(segments...), err.Error())
 				return NewInternalError(err).ToRepr()
 
 			case userError:
-				log.Debugf("user side error while handling %s (%v)", joinPath(segments...), err.Error())
+				_nodesLog.Debugf("user side error while handling %s (%v)", joinPath(segments...), err.Error())
 				return NewUserSideError(err).ToRepr()
 			}
 		}
 
 		return ret
 	} else { // Path not found
-		log.Warnf("path not found %s", joinPath(segments...))
+		_nodesLog.Warnf("path not found %s", joinPath(segments...))
 		return NewPathNotFoundErrorWithDetail(joinPath(segments...)).ToRepr()
 	}
 }

@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+var _proxiesLog = getNamedLogger()
+
 // Represents a generic proxy (i.e. a method, an attribute...)
 type IProxy interface {
 	// Get the full path.
@@ -328,7 +330,7 @@ func (np *NodeProxy) Elements() map[string]*UnknownProxy {
 		if jsonObj, ok := obj.(JsonObj); ok {
 			elements[k] = NewUnknownProxy(np.client, joinPath(np.GetPath(), k), jsonObj)
 		} else {
-			log.Warnf("skipping unknown object: %v", ToPrettyJson(obj))
+			_proxiesLog.Warnf("skipping unknown object: %v", ToPrettyJson(obj))
 		}
 	}
 	return elements

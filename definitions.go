@@ -4,11 +4,14 @@
 package vBus
 
 import (
+	"reflect"
+
 	"github.com/alecthomas/jsonschema"
 	"github.com/pkg/errors"
 	"github.com/xeipuuv/gojsonschema"
-	"reflect"
 )
+
+var _defLog = getNamedLogger()
 
 type iDefinition interface {
 	// Search for a path in this definition.
@@ -137,7 +140,7 @@ func (e *ErrorDefinition) searchPath(parts []string) iDefinition {
 }
 
 func (e *ErrorDefinition) handleSet(data interface{}, parts []string) (interface{}, error) {
-	log.Trace("not implemented")
+	_defLog.Trace("not implemented")
 	return nil, nil
 }
 
@@ -332,7 +335,7 @@ type AttributeDef struct { // implements iDefinition
 func NewAttributeDef(uuid string, value interface{}, options ...defOption) *AttributeDef {
 	opts := getDefOptions(options...)
 	if value == nil {
-		log.Warnf("%s is null, no json schema can be inferred, use NewAttributeDefWithSchema", uuid)
+		_defLog.Warnf("%s is null, no json schema can be inferred, use NewAttributeDefWithSchema", uuid)
 	}
 
 	schema := jsonschema.Reflect(value)
@@ -374,14 +377,14 @@ func (a *AttributeDef) handleSet(data interface{}, parts []string) (interface{},
 	}
 
 	if !result.Valid() {
-		log.Warnf("invalid value received for attribute %s : %v (%v)", a.uuid, data, result.Errors())
+		_defLog.Warnf("invalid value received for attribute %s : %v (%v)", a.uuid, data, result.Errors())
 		return nil, nil
 	}
 
 	if a.onSet != nil {
 		return invokeFunc(a.onSet, data, parts)
 	}
-	log.Debugf("no set handler attached to %s", a.uuid)
+	_defLog.Debugf("no set handler attached to %s", a.uuid)
 	return nil, nil
 }
 
@@ -390,7 +393,7 @@ func (a *AttributeDef) handleGet(data interface{}, parts []string) (interface{},
 		if a.onGet != nil {
 			return invokeFunc(a.onGet, data, parts)
 		} else {
-			log.Debugf("no get handler attached to %s, returning cache", a.uuid)
+			_defLog.Debugf("no get handler attached to %s, returning cache", a.uuid)
 			return a.value, nil
 		}
 	} else { // request on definition

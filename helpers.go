@@ -19,7 +19,6 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
 	"github.com/robpike/filter"
-	"github.com/sirupsen/logrus"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -33,7 +32,7 @@ type JsonObj = map[string]interface{} // an alias (needed for type conversion)
 // Represents any Json
 type JsonAny = interface{}
 
-var log = logrus.New()
+var _helpersLog = getNamedLogger()
 
 func toVbus(obj interface{}) []byte {
 	buf := new(bytes.Buffer)
@@ -85,16 +84,16 @@ func getHostname() string {
 
 	dbusConn, err := dbus.SystemBus()
 	if err != nil {
-		log.Warn("cannot connect to dbus: ", err)
+		_helpersLog.Warn("cannot connect to dbus: ", err)
 	} else {
 		obj := dbusConn.Object("io.veea.VeeaHub.Info", "/io/veea/VeeaHub/Info")
 		call := obj.Call("io.veea.VeeaHub.Info.Hostname", 0)
 		if call.Err != nil {
-			log.Warn("Failed to get hostname on dbus:", call.Err)
+			_helpersLog.Warn("Failed to get hostname on dbus:", call.Err)
 		}
 		err = call.Store(&hostname)
 		if err != nil {
-			log.Warn("unable to store value: ", err)
+			_helpersLog.Warn("unable to store value: ", err)
 		}
 	}
 
@@ -152,7 +151,7 @@ func dnsTextToDict(text []string) map[string]string {
 }
 
 func zeroconfSearch() (urlToTest []string, newHost string, e error) {
-	log.Debug("find vbus on network\n")
+	_helpersLog.Debug("find vbus on network\n")
 	resolver, err := zeroconf.NewResolver(nil)
 	if err != nil {
 		return []string{}, "", errors.Wrap(err, "Failed to initialize resolver")
@@ -162,14 +161,14 @@ func zeroconfSearch() (urlToTest []string, newHost string, e error) {
 	entries := make(chan *zeroconf.ServiceEntry)
 	go func(results <-chan *zeroconf.ServiceEntry) {
 		for entry := range results {
-			log.Debug(entry)
+			_helpersLog.Debug(entry)
 			if "vBus" == entry.Instance {
 				// next step compare host_name to choose the same one than the service if available
-				log.Debug("vbus found !!")
+				_helpersLog.Debug("vbus found !!")
 				serviceList <- entry
 			}
 		}
-		log.Debug("No more entries.")
+		_helpersLog.Debug("No more entries.")
 	}(entries)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -188,7 +187,7 @@ func zeroconfSearch() (urlToTest []string, newHost string, e error) {
 			properties := dnsTextToDict(service.Text)
 			if host, ok := properties["host"]; ok {
 				if hostname, ok := properties["hostname"]; ok {
-					log.Debug("hostname retrieved from mDns: " + hostname)
+					_helpersLog.Debug("hostname retrieved from mDns: " + hostname)
 					urlToTest = append(urlToTest, fmt.Sprintf("nats://%v:%v", host, strconv.Itoa(service.Port)))
 					newHost = hostname
 				}
@@ -197,12 +196,12 @@ func zeroconfSearch() (urlToTest []string, newHost string, e error) {
 			// and a second one using service ip address
 			if len(service.AddrIPv4) > 0 {
 				url := fmt.Sprintf("nats://%v:%v", service.AddrIPv4[0].String(), strconv.Itoa(service.Port))
-				log.Println("vbus urlToTest discovered is: " + url)
+				_helpersLog.Println("vbus urlToTest discovered is: " + url)
 				urlToTest = append(urlToTest, url)
 			}
 		}
 	default:
-		log.Println("no service found")
+		_helpersLog.Println("no service found")
 	}
 	return
 }
