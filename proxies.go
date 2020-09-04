@@ -3,10 +3,11 @@
 package vBus
 
 import (
+	"time"
+
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
 	"github.com/xeipuuv/gojsonschema"
-	"time"
 )
 
 var _proxiesLog = getNamedLogger()
@@ -199,6 +200,16 @@ func (ap *AttributeProxy) SubscribeSet(cb ProxySubCallback) error {
 	return ap.subscribeToEvent(cb, notifValueSetted)
 }
 
+// Get method parameters Json-schema
+func (ap *AttributeProxy) Schema() JsonObj {
+	if hasKey(ap.rawAttr, "schema") {
+		if schema, ok := ap.rawAttr["schema"].(JsonObj); ok {
+			return schema
+		}
+	}
+	return nil
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Node Proxy
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -325,7 +336,7 @@ func (np *NodeProxy) GetElementWithTimeout(timeout time.Duration, parts ...strin
 
 // Retrieve a unknown element
 func (np *NodeProxy) GetElement(parts ...string) (*UnknownProxy, error) {
-	return np.GetElementWithTimeout(2 * time.Second, parts...)
+	return np.GetElementWithTimeout(2*time.Second, parts...)
 }
 
 // Retrieve all elements contained in this node.
@@ -363,6 +374,17 @@ func (np *NodeProxy) Methods() map[string]*MethodProxy {
 	return elements
 }
 
+// Retrieve only nodes.
+func (np *NodeProxy) Nodes() map[string]*NodeProxy {
+	elements := make(map[string]*NodeProxy)
+	for k, obj := range np.rawNode {
+		if isNode(obj) {
+			elements[k] = NewNodeProxy(np.client, joinPath(np.GetPath(), k), obj.(JsonObj))
+		}
+	}
+	return elements
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Method Proxy
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -379,6 +401,34 @@ func NewMethodProxy(client *ExtendedNatsClient, path string, methodDef JsonObj) 
 		ProxyBase: NewProxyBase(client, path, methodDef),
 		methodDef: methodDef,
 	}
+}
+
+// Get method parameters Json-schema
+func (mp *MethodProxy) ParamsSchema() JsonObj {
+	if hasKey(mp.methodDef, "params") {
+		if hasKey(mp.methodDef["params"], "schema") {
+			if params, ok := mp.methodDef["params"].(JsonObj); ok {
+				if schema, ok := params["schema"].(JsonObj); ok {
+					return schema
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// Get method return value Json-schema
+func (mp *MethodProxy) ReturnsSchema() JsonObj {
+	if hasKey(mp.methodDef, "returns") {
+		if hasKey(mp.methodDef["returns"], "schema") {
+			if params, ok := mp.methodDef["returns"].(JsonObj); ok {
+				if schema, ok := params["schema"].(JsonObj); ok {
+					return schema
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // Call the remote method with some arguments.
