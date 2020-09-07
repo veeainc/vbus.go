@@ -367,7 +367,7 @@ func (np *NodeProxy) Attributes() map[string]*AttributeProxy {
 func (np *NodeProxy) Methods() map[string]*MethodProxy {
 	elements := make(map[string]*MethodProxy)
 	for k, obj := range np.rawNode {
-		if isMethod(&obj) {
+		if isMethod(obj) {
 			elements[k] = NewMethodProxy(np.client, joinPath(np.GetPath(), k), obj.(JsonObj))
 		}
 	}
