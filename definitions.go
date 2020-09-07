@@ -29,18 +29,18 @@ type iDefinition interface {
 }
 
 // Tells if a raw node is an attribute.
-func isAttribute(node interface{}) bool {
+func IsAttribute(node interface{}) bool {
 	return hasKey(node, "schema")
 }
 
 // Tells if a raw node is a method.
-func isMethod(node interface{}) bool {
+func IsMethod(node interface{}) bool {
 	return hasKey(node, "params") && hasKey(node, "returns")
 }
 
 // Tells if a raw node is a node.
-func isNode(node interface{}) bool {
-	return !isAttribute(node) && !isMethod(node)
+func IsNode(node interface{}) bool {
+	return !IsAttribute(node) && !IsMethod(node)
 }
 
 type SetCallback = func(data interface{}, segment []string)

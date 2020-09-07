@@ -113,7 +113,7 @@ func (up *UnknownProxy) Tree() JsonAny {
 
 // Is it an attribute ?
 func (up *UnknownProxy) IsAttribute() bool {
-	return isAttribute(up.rawDef)
+	return IsAttribute(up.rawDef)
 }
 
 // Transform to an AttributeProxy (use IsAttribute before).
@@ -123,7 +123,7 @@ func (up *UnknownProxy) AsAttribute() *AttributeProxy {
 
 // Is it a method ?
 func (up *UnknownProxy) IsMethod() bool {
-	return isMethod(up.rawDef)
+	return IsMethod(up.rawDef)
 }
 
 // Transform to an MethodProxy (use IsMethod before).
@@ -133,7 +133,7 @@ func (up *UnknownProxy) AsMethod() *MethodProxy {
 
 // Is it a node ?
 func (up *UnknownProxy) IsNode() bool {
-	return isNode(up.rawDef)
+	return IsNode(up.rawDef)
 }
 
 // Transform to an NodeProxy (use IsMethod before).
@@ -356,7 +356,7 @@ func (np *NodeProxy) Elements() map[string]*UnknownProxy {
 func (np *NodeProxy) Attributes() map[string]*AttributeProxy {
 	elements := make(map[string]*AttributeProxy)
 	for k, obj := range np.rawNode {
-		if isAttribute(obj) {
+		if IsAttribute(obj) {
 			elements[k] = NewAttributeProxy(np.client, joinPath(np.GetPath(), k), obj.(JsonObj))
 		}
 	}
@@ -367,7 +367,7 @@ func (np *NodeProxy) Attributes() map[string]*AttributeProxy {
 func (np *NodeProxy) Methods() map[string]*MethodProxy {
 	elements := make(map[string]*MethodProxy)
 	for k, obj := range np.rawNode {
-		if isMethod(obj) {
+		if IsMethod(obj) {
 			elements[k] = NewMethodProxy(np.client, joinPath(np.GetPath(), k), obj.(JsonObj))
 		}
 	}
@@ -378,7 +378,7 @@ func (np *NodeProxy) Methods() map[string]*MethodProxy {
 func (np *NodeProxy) Nodes() map[string]*NodeProxy {
 	elements := make(map[string]*NodeProxy)
 	for k, obj := range np.rawNode {
-		if isNode(obj) {
+		if IsNode(obj) {
 			elements[k] = NewNodeProxy(np.client, joinPath(np.GetPath(), k), obj.(JsonObj))
 		}
 	}
