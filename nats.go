@@ -409,8 +409,8 @@ func (c *ExtendedNatsClient) getFromZeroconf(config *configuration) (url []strin
 func (c *ExtendedNatsClient) findVbusUrl(config *configuration) (serverUrl string, newHost string, e error) {
 	findServerUrlStrategies := []func(config *configuration) (url []string, newHost string, e error){
 		c.getFromHubId,
-		c.getFromConfigFile,
 		c.getFromEnv,
+		c.getFromConfigFile,
 		c.getDefault,
 		c.getFromZeroconf,
 	}
