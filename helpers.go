@@ -196,7 +196,7 @@ func zeroconfSearch() (urlToTest []string, newHost string, e error) {
 			// and a second one using service ip address
 			if len(service.AddrIPv4) > 0 {
 				url := fmt.Sprintf("nats://%v:%v", service.AddrIPv4[0].String(), strconv.Itoa(service.Port))
-				_helpersLog.Println("vbus urlToTest discovered is: " + url)
+				_helpersLog.Debug("vbus urlToTest discovered is: " + url)
 				urlToTest = append(urlToTest, url)
 			}
 		}
