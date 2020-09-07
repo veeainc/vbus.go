@@ -485,7 +485,7 @@ func (c *ExtendedNatsClient) readOrGetDefaultConfig() (*configuration, error) {
 		}
 	}
 
-	_natsLog.Debug("check if we already have a Vbus config file in %s" + c.rootFolder)
+	_natsLog.Debug("check if we already have a Vbus config file in %s", c.rootFolder)
 	configFile := path.Join(c.rootFolder, c.id) + ".conf"
 	if fileExists(configFile) {
 		_natsLog.Debugf("load existing configuration file for %s", c.id)
