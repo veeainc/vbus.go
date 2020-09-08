@@ -335,7 +335,7 @@ type AttributeDef struct { // implements iDefinition
 func NewAttributeDef(uuid string, value interface{}, options ...defOption) *AttributeDef {
 	opts := getDefOptions(options...)
 	if value == nil {
-		_defLog.Warnf("%s is null, no json schema can be inferred, use NewAttributeDefWithSchema", uuid)
+		_defLog.WithFields(LF{"uuid": uuid}).Warn("no value provided, no json schema can be inferred, use NewAttributeDefWithSchema")
 	}
 
 	schema := jsonschema.Reflect(value)
@@ -377,14 +377,17 @@ func (a *AttributeDef) handleSet(data interface{}, parts []string) (interface{},
 	}
 
 	if !result.Valid() {
-		_defLog.Warnf("invalid value received for attribute %s : %v (%v)", a.uuid, data, result.Errors())
+		_defLog.WithFields(LF{
+			"uuid": a.uuid,
+			"value": data,
+			"error": result.Errors(),}).Warn("invalid value received for attribute")
 		return nil, nil
 	}
 
 	if a.onSet != nil {
 		return invokeFunc(a.onSet, data, parts)
 	}
-	_defLog.Debugf("no set handler attached to %s", a.uuid)
+	_defLog.WithFields(LF{"uuid": a.uuid}).Debug("no set handler attached")
 	return nil, nil
 }
 
@@ -393,7 +396,7 @@ func (a *AttributeDef) handleGet(data interface{}, parts []string) (interface{},
 		if a.onGet != nil {
 			return invokeFunc(a.onGet, data, parts)
 		} else {
-			_defLog.Debugf("no get handler attached to %s, returning cache", a.uuid)
+			_defLog.WithFields(LF{"uuid": a.uuid}).Debug("no get handler attached, returning cache")
 			return a.value, nil
 		}
 	} else { // request on definition

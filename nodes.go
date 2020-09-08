@@ -269,7 +269,7 @@ func (nm *NodeManager) Discover(natsPath string, timeout time.Duration) (*Unknow
 	sub, err := nm.client.client.Subscribe(inbox, func(msg *nats.Msg) {
 		data, err := fromVbus(msg.Data)
 		if err != nil {
-			_nodesLog.Warnf("received invalid node from %s", msg.Subject)
+			_nodesLog.WithFields(LF{"path": msg.Subject}).Warn("received invalid node")
 			return // skip
 		}
 
@@ -307,7 +307,7 @@ func (nm *NodeManager) DiscoverModules(timeout time.Duration) ([]ModuleInfo, err
 		var info ModuleInfo
 		err := json.Unmarshal(msg.Data, &info)
 		if err != nil {
-			_nodesLog.Warnf("received invalid info from %s, skipping", msg.Subject)
+			_nodesLog.WithFields(LF{"path": msg.Subject}).Warn("received invalid info, skipping")
 			return // skip
 		}
 		resp = append(resp, info)
@@ -433,18 +433,18 @@ func (nm *NodeManager) handleEvent(data interface{}, event string, segments ...s
 			switch err.(type) {
 			// Internal error
 			default:
-				_nodesLog.Warnf("internal error while handling %s (%v)", joinPath(segments...), err.Error())
+				_nodesLog.WithFields(LF{"path": joinPath(segments...), "error": err}).Warn("internal error")
 				return NewInternalError(err).ToRepr()
 
 			case userError:
-				_nodesLog.Debugf("user side error while handling %s (%v)", joinPath(segments...), err.Error())
+				_nodesLog.WithFields(LF{"path": joinPath(segments...), "error": err}).Debugf("user side error")
 				return NewUserSideError(err).ToRepr()
 			}
 		}
 
 		return ret
 	} else { // Path not found
-		_nodesLog.Warnf("path not found %s", joinPath(segments...))
+		_nodesLog.WithFields(LF{"path": joinPath(segments...)}).Warn("path not found")
 		return NewPathNotFoundErrorWithDetail(joinPath(segments...)).ToRepr()
 	}
 }

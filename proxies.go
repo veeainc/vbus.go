@@ -346,7 +346,7 @@ func (np *NodeProxy) Elements() map[string]*UnknownProxy {
 		if jsonObj, ok := obj.(JsonObj); ok {
 			elements[k] = NewUnknownProxy(np.client, joinPath(np.GetPath(), k), jsonObj)
 		} else {
-			_proxiesLog.Warnf("skipping unknown object: %v", ToPrettyJson(obj))
+			_proxiesLog.WithFields(LF{"obj": ToPrettyJson(obj)}).Warn("skipping unknown object")
 		}
 	}
 	return elements
