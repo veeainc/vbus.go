@@ -426,13 +426,17 @@ func (c *ExtendedNatsClient) findVbusUrl(config *configuration) (serverUrl strin
 		urls, newHost, e = strategy(config)
 		for _, url := range urls {
 			if testVbusUrl(url) {
-				_natsLog.Debugf("url found using strategy '%s': %s", getFunctionName(strategy), serverUrl)
+				_natsLog.Debugf("url found using strategy '%s': %s", getFunctionName(strategy), url)
 				success = true
 				serverUrl = url
 				break
 			} else {
-				_natsLog.Debugf("cannot find a valid url using strategy '%s': %s", getFunctionName(strategy), serverUrl)
+				_natsLog.Debugf("cannot find a valid url using strategy '%s': %s", getFunctionName(strategy), url)
 			}
+		}
+
+		if len(urls) == 0 {
+			_natsLog.Debugf("strategy %s returned no results", getFunctionName(strategy))
 		}
 	}
 
