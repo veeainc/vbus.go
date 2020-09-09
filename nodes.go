@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"path"
 	"runtime"
 	"strings"
@@ -492,13 +491,14 @@ func (nm *NodeManager) GetRemoteElementWithTimeout(timeout time.Duration, parts 
 
 // Expose a service identified with an uri on Vbus.
 func (nm *NodeManager) Expose(name, protocol string, port int, path string) error {
-	// resolve current hostname to get ip address
-	addr, err := net.LookupIP(nm.client.GetHostname())
-	if err != nil {
-		return errors.Wrap(err, "Cannot resolve hostname")
+	networkIp := nm.client.networkIp
+
+	if networkIp == "" {
+		networkIp = nm.client.client.ConnectedAddr()
+		_nodesLog.WithField("ip", networkIp).Warn("expose: network ip not populated, using nats connection ip instead")
 	}
-	ipAddress := addr[0]
-	uri := fmt.Sprintf("%v://%v:%v/%v", protocol, ipAddress, port, path)
+
+	uri := fmt.Sprintf("%v://%v:%v/%v", protocol, networkIp, port, path)
 
 	if nm.urisNode == nil {
 		node, err := nm.AddNode(exposeNodeUuid, RawNode{})
@@ -508,7 +508,7 @@ func (nm *NodeManager) Expose(name, protocol string, port int, path string) erro
 		nm.urisNode = node
 	}
 
-	_, err = nm.urisNode.AddAttribute(name, uri)
+	_, err := nm.urisNode.AddAttribute(name, uri)
 
 	if err == nil {
 		_nodesLog.WithField("uri", uri).Info("successfully exposed service")

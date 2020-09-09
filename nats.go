@@ -34,6 +34,7 @@ type ExtendedNatsClient struct {
 	env            map[string]string // environment variables
 	rootFolder     string            // config folder root
 	client         *nats.Conn        // client handle
+	networkIp      string            // public network ip, populated during mdns discovery
 }
 
 // A Nats callback, that take data and path segment
@@ -403,7 +404,8 @@ func (c *ExtendedNatsClient) getDefault(config *configuration) (url []string, ne
 
 // find vbus server  - strategy 4: find it using avahi
 func (c *ExtendedNatsClient) getFromZeroconf(config *configuration) (url []string, newHost string, e error) {
-	return zeroconfSearch()
+	url, newHost, c.networkIp, e = zeroconfSearch()
+	return
 }
 
 func (c *ExtendedNatsClient) findVbusUrl(config *configuration) (serverUrl string, newHost string, e error) {
