@@ -154,6 +154,7 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 
 		// update the config file with the new url
 		config.Vbus.Url = url
+		config.Vbus.NetworkIp = c.networkIp
 
 		// check if we need to update remote host
 		if newHost != "" {
@@ -471,8 +472,9 @@ type keyConfig struct {
 }
 
 type vbusConfig struct {
-	Url      string `json:"url"`
-	Hostname string `json:"hostname"`
+	Url       string `json:"url"`
+	NetworkIp string `json:"networkIp"`
+	Hostname  string `json:"hostname"`
 }
 
 type configuration struct {
