@@ -153,11 +153,11 @@ func dnsTextToDict(text []string) map[string]string {
 	return res
 }
 
-func zeroconfSearch() (urlToTest []string, newHost string, e error) {
+func zeroconfSearch() (urlToTest []string, newHost string, networkIp string, e error) {
 	_helpersLog.Debug("searching vbus on network")
 	resolver, err := zeroconf.NewResolver(nil)
 	if err != nil {
-		return []string{}, "", errors.Wrap(err, "Failed to initialize resolver")
+		return []string{}, "", "", errors.Wrap(err, "Failed to initialize resolver")
 	}
 
 	serviceList := make(chan *zeroconf.ServiceEntry, 1)
@@ -178,7 +178,7 @@ func zeroconfSearch() (urlToTest []string, newHost string, e error) {
 	defer cancel()
 	err = resolver.Browse(ctx, "_nats._tcp", "local.", entries)
 	if err != nil {
-		return []string{}, "", errors.Wrap(err, "Failed to browse")
+		return []string{}, "", "", errors.Wrap(err, "Failed to browse")
 	}
 
 	<-ctx.Done()
@@ -193,6 +193,8 @@ func zeroconfSearch() (urlToTest []string, newHost string, e error) {
 					_helpersLog.WithFields(LF{"hostname": hostname}).Debug("hostname retrieved from mDns")
 					urlToTest = append(urlToTest, fmt.Sprintf("nats://%v:%v", host, strconv.Itoa(service.Port)))
 					newHost = hostname
+					networkIp = properties["host"]
+					_helpersLog.WithFields(LF{"ip": networkIp}).Debug("public ip discovered")
 				}
 			}
 
