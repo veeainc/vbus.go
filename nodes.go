@@ -86,6 +86,11 @@ func NewNode(nats *ExtendedNatsClient, uuid string, definition *NodeDef, parent 
 	}
 }
 
+// Get node definition.
+func (n *Node) Definition() *NodeDef {
+	return n.definition
+}
+
 // Add a child node and notify Vbus
 // Returns: a new node
 func (n *Node) AddNode(uuid string, rawNode RawNode, options ...defOption) (*Node, error) {
