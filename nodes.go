@@ -32,7 +32,7 @@ var _nodesLog = getNamedLogger()
 
 // A Vbus connected element that send updates.
 type IElement interface {
-	getDefinition() iDefinition
+	getDefinition() IDefinition
 
 	GetPath() string
 }
@@ -41,7 +41,7 @@ type IElement interface {
 type Element struct {
 	client     *ExtendedNatsClient
 	uuid       string
-	definition iDefinition
+	definition IDefinition
 	parent     IElement
 }
 
@@ -49,7 +49,7 @@ func (e *Element) GetUuid() string {
 	return e.uuid
 }
 
-func (e *Element) getDefinition() iDefinition {
+func (e *Element) getDefinition() IDefinition {
 	return e.definition
 }
 
