@@ -13,10 +13,10 @@ import (
 
 var _defLog = getNamedLogger()
 
-type iDefinition interface {
+type IDefinition interface {
 	// Search for a path in this definition.
-	// It can returns a iDefinition or none if not found.
-	searchPath(parts []string) iDefinition
+	// It can returns a IDefinition or none if not found.
+	searchPath(parts []string) IDefinition
 
 	// Tells how to handle a set request from Vbus.
 	handleSet(data interface{}, parts []string) (interface{}, error)
@@ -95,7 +95,7 @@ const (
 )
 
 // Represents a Vbus error.
-type ErrorDefinition struct { // implements iDefinition
+type ErrorDefinition struct { // implements IDefinition
 	code    ErrorCode
 	message string
 	detail  interface{}
@@ -132,7 +132,7 @@ func NewErrorFromVbus(node interface{}) *ErrorDefinition {
 	return err
 }
 
-func (e *ErrorDefinition) searchPath(parts []string) iDefinition {
+func (e *ErrorDefinition) searchPath(parts []string) IDefinition {
 	if len(parts) <= 0 {
 		return e
 	}
@@ -190,7 +190,7 @@ func isErrorDefinition(node interface{}) bool {
 
 // A Method definition.
 // It holds a user callback.
-type MethodDef struct { // implements iDefinition
+type MethodDef struct { // implements IDefinition
 	method        MethodDefCallback
 	name          string
 	paramsSchema  JsonObj
@@ -287,7 +287,7 @@ func (md *MethodDef) inspectMethod() error {
 	return nil
 }
 
-func (md *MethodDef) searchPath(parts []string) iDefinition {
+func (md *MethodDef) searchPath(parts []string) IDefinition {
 	if len(parts) <= 0 {
 		return md
 	}
@@ -320,10 +320,10 @@ func (md *MethodDef) ToRepr() JsonObj {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Attribute iDefinition
+// Attribute IDefinition
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-type AttributeDef struct { // implements iDefinition
+type AttributeDef struct { // implements IDefinition
 	uuid   string
 	value  interface{}
 	schema interface{}
@@ -359,7 +359,7 @@ func NewAttributeDefWithSchema(uuid string, value interface{}, schema map[string
 		onGet:  onGet}
 }
 
-func (a *AttributeDef) searchPath(parts []string) iDefinition {
+func (a *AttributeDef) searchPath(parts []string) IDefinition {
 	if len(parts) <= 0 {
 		return a
 	} else if sliceEqual(parts, []string{"value"}) {
@@ -421,15 +421,15 @@ func (a *AttributeDef) ToRepr() JsonObj {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Node iDefinition
+// Node IDefinition
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type RawNode = map[string]interface{}
-type NodeStruct = map[string]iDefinition
+type NodeStruct = map[string]IDefinition
 
 // A node definition.
 // It holds a user structure (Python object) and optional callbacks.
-type NodeDef struct { // implements iDefinition
+type NodeDef struct { // implements IDefinition
 	structure NodeStruct
 	onSet     SetCallback
 }
@@ -442,7 +442,7 @@ func NewNodeDef(rawNode RawNode, option ...defOption) *NodeDef {
 	}
 }
 
-func (nd *NodeDef) searchPath(parts []string) iDefinition {
+func (nd *NodeDef) searchPath(parts []string) IDefinition {
 	if len(parts) <= 0 {
 		return nd
 	} else if v, ok := nd.structure[parts[0]]; ok {
@@ -478,7 +478,7 @@ func initializeStructure(rawNode RawNode) NodeStruct {
 	for k, v := range rawNode {
 		if isMap(v) { // if its a map
 			structure[k] = NewNodeDef(v.(RawNode))
-		} else if d, ok := v.(iDefinition); ok { // if its already a definition
+		} else if d, ok := v.(IDefinition); ok { // if its already a definition
 			structure[k] = d
 		} else {
 			structure[k] = NewAttributeDef(k, v)
@@ -487,11 +487,11 @@ func initializeStructure(rawNode RawNode) NodeStruct {
 	return structure
 }
 
-func (nd *NodeDef) AddChild(uuid string, node iDefinition) {
+func (nd *NodeDef) AddChild(uuid string, node IDefinition) {
 	nd.structure[uuid] = node
 }
 
-func (nd *NodeDef) RemoveChild(uuid string) iDefinition {
+func (nd *NodeDef) RemoveChild(uuid string) IDefinition {
 	if v, ok := nd.structure[uuid]; ok {
 		delete(nd.structure, uuid)
 		return v
