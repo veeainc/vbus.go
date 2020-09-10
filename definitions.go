@@ -386,8 +386,11 @@ func (a *AttributeDef) handleSet(data interface{}, parts []string) (interface{},
 
 	if a.onSet != nil {
 		return invokeFunc(a.onSet, data, parts)
+	} else {
+		_defLog.WithFields(LF{"uuid": a.uuid}).Debug("no set handler attached, updating cache value")
+		a.value = data
 	}
-	_defLog.WithFields(LF{"uuid": a.uuid}).Debug("no set handler attached")
+
 	return nil, nil
 }
 
