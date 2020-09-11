@@ -359,6 +359,16 @@ func NewAttributeDefWithSchema(uuid string, value interface{}, schema map[string
 		onGet:  onGet}
 }
 
+// Get uuid.
+func (a *AttributeDef) Uuid() string {
+	return a.uuid
+}
+
+// Get value.
+func (a *AttributeDef) Value() interface{} {
+	return a.value
+}
+
 func (a *AttributeDef) searchPath(parts []string) IDefinition {
 	if len(parts) <= 0 {
 		return a
