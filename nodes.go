@@ -14,8 +14,8 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
-	"github.com/robpike/filter"
 	"github.com/sirupsen/logrus"
+	"robpike.io/filter"
 )
 
 const (

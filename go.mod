@@ -14,7 +14,6 @@ require (
 	github.com/nats-io/nats.go v1.9.1
 	github.com/onsi/ginkgo v1.14.0 // indirect
 	github.com/pkg/errors v0.8.1
-	github.com/robpike/filter v0.0.0-20150108201509-2984852a2183
 	github.com/sirupsen/logrus v1.4.2
 	github.com/stretchr/testify v1.3.1-0.20190311161405-34c6fa2dc709
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2
