@@ -21,4 +21,5 @@ require (
 	github.com/xeipuuv/gojsonschema v1.2.0
 	golang.org/x/crypto v0.0.0-20200109152110-61a87790db17
 	gotest.tools v2.2.0+incompatible
+	robpike.io/filter v0.0.0-20150108201509-2984852a2183
 )
