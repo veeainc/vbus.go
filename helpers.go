@@ -18,8 +18,8 @@ import (
 	"github.com/grandcat/zeroconf"
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
-	"github.com/robpike/filter"
 	"github.com/xeipuuv/gojsonschema"
+	"robpike.io/filter"
 )
 
 const (
