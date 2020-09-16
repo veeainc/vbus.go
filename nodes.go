@@ -495,6 +495,12 @@ func (nm *NodeManager) Expose(name, protocol string, port int, path string) erro
 
 	if networkIp == "" {
 		networkIp = nm.client.client.ConnectedAddr()
+
+		// remove port information
+		if strings.Contains(networkIp, ":") {
+			networkIp = strings.Split(networkIp, ":")[0]
+		}
+
 		_nodesLog.WithField("ip", networkIp).Warn("expose: network ip not populated, using nats connection ip instead")
 	}
 
