@@ -509,5 +509,10 @@ func (nm *NodeManager) Expose(name, protocol string, port int, path string) erro
 	}
 
 	_, err = nm.urisNode.AddAttribute(name, uri)
+
+	if err == nil {
+		_nodesLog.WithField("uri", uri).Info("successfully exposed service")
+	}
+
 	return err
 }
