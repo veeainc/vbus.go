@@ -491,7 +491,12 @@ func (nm *NodeManager) GetRemoteElementWithTimeout(timeout time.Duration, parts 
 
 // Expose a service identified with an uri on Vbus.
 func (nm *NodeManager) Expose(name, protocol string, port int, path string) error {
-	networkIp := nm.client.networkIp
+	conf, err := nm.client.readOrGetDefaultConfig()
+	if err != nil {
+		return err
+	}
+
+	networkIp := conf.Vbus.NetworkIp
 
 	if networkIp == "" {
 		networkIp = nm.client.client.ConnectedAddr()
@@ -514,7 +519,7 @@ func (nm *NodeManager) Expose(name, protocol string, port int, path string) erro
 		nm.urisNode = node
 	}
 
-	_, err := nm.urisNode.AddAttribute(name, uri)
+	_, err = nm.urisNode.AddAttribute(name, uri)
 
 	if err == nil {
 		_nodesLog.WithField("uri", uri).Info("successfully exposed service")
