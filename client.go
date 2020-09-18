@@ -69,3 +69,9 @@ func (c *Client) AskPermission(permission string) (bool, error) {
 func (c *Client) GetConfig() (*configuration, error) {
 	return c.client.readOrGetDefaultConfig()
 }
+
+// Create a remote logger that log messages though the vBus server.
+// 'namespace' allow to prefix log message with <namespace>: <message>
+func (c *Client) GetRemoteLogger(namespace string) *RemoteLogger {
+	return NewRemoteLogger(c.nats, namespace)
+}

@@ -419,6 +419,10 @@ func (nm *NodeManager) getModuleInfo() ModuleInfo {
 
 // Handle incoming get requests.
 func (nm *NodeManager) handleEvent(data interface{}, event string, segments ...string) interface{} {
+	if len(segments) > 0 && segments[0] == systemSegment {
+		return nil // ignore
+	}
+
 	nodeDef := (*nm.definition).searchPath(segments)
 	if nodeDef != nil { // if found
 		var ret interface{}
