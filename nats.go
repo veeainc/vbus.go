@@ -154,7 +154,10 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 
 		// update the config file with the new url
 		config.Vbus.Url = url
-		config.Vbus.NetworkIp = c.networkIp
+
+		if c.networkIp != "" {
+			config.Vbus.NetworkIp = c.networkIp
+		}
 
 		// check if we need to update remote host
 		if newHost != "" {
