@@ -470,3 +470,8 @@ func contains(arr []string, str string) bool {
 	}
 	return false
 }
+
+// Replace unwanted characters in a nats segment.
+func sanitizeNatsSegment(s string) string {
+	return strings.ReplaceAll(s, ".", "_")
+}

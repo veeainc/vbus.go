@@ -72,7 +72,7 @@ func WithUser(login, pwd string) natsConnectOption {
 
 // Constructor when the server and the client are running on the same system (same hostname).
 func NewExtendedNatsClient(appDomain, appId string) *ExtendedNatsClient {
-	hostname := getHostname()
+	hostname := sanitizeNatsSegment(getHostname())
 
 	client := &ExtendedNatsClient{
 		hostname:       hostname,
@@ -120,9 +120,9 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 	}
 
 	if opts.HubId != "" {
-		c.remoteHostname = opts.HubId
+		c.remoteHostname = sanitizeNatsSegment(opts.HubId)
 	} else {
-		c.remoteHostname = c.hostname
+		c.remoteHostname = sanitizeNatsSegment(c.hostname)
 	}
 
 	if opts.hasUser() {
@@ -133,7 +133,7 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 
 		// check if we need to update remote host
 		if newHost != "" {
-			c.remoteHostname = newHost
+			c.remoteHostname = sanitizeNatsSegment(newHost)
 		}
 
 		// connect with provided user info
@@ -158,7 +158,7 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 
 		// check if we need to update remote host
 		if newHost != "" {
-			c.remoteHostname = newHost
+			c.remoteHostname = sanitizeNatsSegment(newHost)
 		}
 		config.Vbus.Hostname = c.remoteHostname
 
@@ -390,9 +390,9 @@ func (c *ExtendedNatsClient) CreateUser(userConfig ClientConfig, options ...nats
 	}
 
 	if opts.HubId != "" {
-		c.remoteHostname = opts.HubId
+		c.remoteHostname = sanitizeNatsSegment(opts.HubId)
 	} else {
-		c.remoteHostname = c.hostname
+		c.remoteHostname = sanitizeNatsSegment(c.hostname)
 	}
 
 	url, _, err := c.findVbusUrl(&configuration{}) // empty configuration

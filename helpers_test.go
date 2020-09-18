@@ -64,3 +64,8 @@ func TestJsonByteArray_MarshalJSON(t *testing.T) {
 	data, _ := array.MarshalJSON()
 	assert.Equal(t, string(data), str)
 }
+
+func TestSanitizeNatsSegment(t *testing.T) {
+	assert.Equal(t, sanitizeNatsSegment("veea.local"), "veea_local")
+	assert.Equal(t, sanitizeNatsSegment("boolangery-ThinkPad-P1-Gen-2"), "boolangery-ThinkPad-P1-Gen-2")
+}
