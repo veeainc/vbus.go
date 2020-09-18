@@ -167,17 +167,27 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 			return errors.Wrap(err, "cannot save configuration")
 		}
 
-		err = c.publishUser(url, config.Client)
-		if err != nil {
-			return errors.Wrap(err, "cannot create user")
-		}
-		time.Sleep(2000 * time.Millisecond)
-
-		// connect with newly created user
+		// try to connect directly and push user if fail
+		// connect with user in config file
 		c.client, err = nats.Connect(url,
 			nats.UserInfo(config.Client.User, config.Key.Private),
 			nats.Name(config.Client.User))
+		if err != nil {
+			_natsLog.Debug("unable to connect with user in config file, adding it")
 
+			err = c.publishUser(url, config.Client)
+			if err != nil {
+				return errors.Wrap(err, "cannot create user")
+			}
+			time.Sleep(2000 * time.Millisecond)
+
+			// connect with user in config file
+			c.client, err = nats.Connect(url,
+				nats.UserInfo(config.Client.User, config.Key.Private),
+				nats.Name(config.Client.User))
+		}
+
+		_natsLog.Debug("connected")
 		return err
 	}
 }
