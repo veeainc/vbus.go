@@ -461,3 +461,12 @@ func (u *JsonByteArray) Unmarshall(value interface{}) error {
 	}
 	return errors.New("not an array")
 }
+
+func contains(arr []string, str string) bool {
+	for _, a := range arr {
+		if a == str {
+			return true
+		}
+	}
+	return false
+}

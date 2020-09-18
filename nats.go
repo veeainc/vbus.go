@@ -321,20 +321,42 @@ func (c *ExtendedNatsClient) AskPermission(permission string) (bool, error) {
 		return false, errors.Wrap(err, "cannot read config")
 	}
 
-	config.Client.Permissions.Subscribe = append(config.Client.Permissions.Subscribe, permission)
-	config.Client.Permissions.Publish = append(config.Client.Permissions.Publish, permission)
-	natsPath := fmt.Sprintf("system.authorization.%s.%s.%s.permissions.set", c.remoteHostname, c.id, c.hostname)
-	resp, err := c.Request(natsPath, config.Client.Permissions, Timeout(10*time.Second), WithoutId(), WithoutHost())
-	if err != nil {
-		return false, err
+	fileChanged := false
+
+	if !contains(config.Client.Permissions.Subscribe, permission) {
+		config.Client.Permissions.Subscribe = append(config.Client.Permissions.Subscribe, permission)
+		fileChanged = true
 	}
 
-	err = c.saveConfigFile(config)
-	if err != nil {
-		return false, errors.Wrap(err, "cannot save config")
+	if !contains(config.Client.Permissions.Publish, permission) {
+		config.Client.Permissions.Publish = append(config.Client.Permissions.Publish, permission)
+		fileChanged = true
 	}
 
-	return resp.(bool), nil
+	if fileChanged {
+		_natsLog.Debug("permissions changed, sending them to server")
+
+		natsPath := fmt.Sprintf("system.authorization.%s.%s.%s.permissions.set", c.remoteHostname, c.id, c.hostname)
+		resp, err := c.Request(natsPath, config.Client.Permissions, Timeout(10*time.Second), WithoutId(), WithoutHost())
+		if err != nil {
+			return false, err
+		}
+
+		if resp.(bool) == false {
+			_natsLog.Debug("cannot add permission on server")
+			return false, nil
+		}
+
+		err = c.saveConfigFile(config)
+		if err != nil {
+			return false, errors.Wrap(err, "cannot save config")
+		}
+
+		return resp.(bool), nil
+	}
+
+	_natsLog.Debug("permissions are already ok")
+	return true, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
