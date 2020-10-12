@@ -3,6 +3,7 @@ package vBus
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"io/ioutil"
 	"net"
 	"os"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -284,28 +284,30 @@ func (c *ExtendedNatsClient) Subscribe(base string, cb NatsCallback, advOpts ...
 	r := regexp.MustCompile(regex)
 
 	return c.client.Subscribe(natsPath, func(msg *nats.Msg) {
-		m := r.FindStringSubmatch(msg.Subject)
-		// Parse data
-		data, err := fromVbus(msg.Data)
-		if err != nil {
-			logrus.Warnf("error while calling subscribe callback: %v", err.Error())
-			return
-		}
-
-		res, err := invokeFunc(cb, data, m[1:])
-		if err != nil {
-			_natsLog.WithField("error", err).Warn("cannot call user callback")
-			return
-		}
-
-		// if there is a reply subject, use it to send response
-		if isStrNotEmpty(msg.Reply) {
-			err = c.client.Publish(msg.Reply, toVbus(res))
+		go func(cb NatsCallback, r *regexp.Regexp, msg *nats.Msg) {
+			m := r.FindStringSubmatch(msg.Subject)
+			// Parse data
+			data, err := fromVbus(msg.Data)
 			if err != nil {
-				_natsLog.WithField("error", err).Warn("error while sending response")
+				logrus.Warnf("error while calling subscribe callback: %v", err.Error())
 				return
 			}
-		}
+
+			res, err := invokeFunc(cb, data, m[1:])
+			if err != nil {
+				_natsLog.WithField("error", err).Warn("cannot call user callback")
+				return
+			}
+
+			// if there is a reply subject, use it to send response
+			if isStrNotEmpty(msg.Reply) {
+				err = c.client.Publish(msg.Reply, toVbus(res))
+				if err != nil {
+					_natsLog.WithField("error", err).Warn("error while sending response")
+					return
+				}
+			}
+		}(cb, r, msg)
 	})
 }
 
