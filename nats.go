@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"strconv"
 
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
@@ -136,6 +137,12 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 			c.remoteHostname = sanitizeNatsSegment(newHost)
 		}
 
+		// check that we have a real hostname
+		// overwise we replace it with the remote hostname
+		if _, err := strconv.Atoi(c.hostname); err == nil {
+			fmt.Printf("hostname: %q is a number. Probably a random\nSo replace it with the remote hostname: %s", c.hostname, c.remoteHostname)
+		}
+
 		// connect with provided user info
 		c.client, err = nats.Connect(url,
 			nats.UserInfo(opts.Login, opts.Password),
@@ -165,6 +172,12 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 		}
 		config.Vbus.Hostname = c.remoteHostname
 
+		// check that we have a real hostname
+		// overwise we replace it with the remote hostname
+		if _, err := strconv.Atoi(c.hostname); err == nil {
+			fmt.Printf("hostname: %q is a number. Probably a random\nSo replace it with the remote hostname: %s", c.hostname, c.remoteHostname)
+		}
+
 		err = c.saveConfigFile(config)
 		if err != nil {
 			return errors.Wrap(err, "cannot save configuration")
@@ -189,6 +202,10 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 				nats.UserInfo(config.Client.User, config.Key.Private),
 				nats.Name(config.Client.User))
 		}
+		time.Sleep(1000 * time.Millisecond)
+
+		natsPath := fmt.Sprintf("system.authorization.%s.%s.%s.permissions.set", c.remoteHostname, c.id, c.hostname)
+		c.Request(natsPath, config.Client.Permissions, Timeout(10*time.Second), WithoutId(), WithoutHost())
 
 		_natsLog.Debug("connected")
 		return err
@@ -437,7 +454,9 @@ func (c *ExtendedNatsClient) getFromEnv(config *configuration) (url []string, ne
 
 // find vbus server  - strategy 3: try default url client://hostname:21400
 func (c *ExtendedNatsClient) getDefault(config *configuration) (url []string, newHost string, e error) {
-	return []string{fmt.Sprintf("nats://%s.veeamesh.local:21400", c.hostname)}, "", nil
+	url = []string{"nats://vbus.service.veeamesh.local:21400"}
+	newHost = getHostnameFromvBus(url[0])
+	return url, newHost, nil
 }
 
 // find vbus server  - strategy 4: find it using avahi

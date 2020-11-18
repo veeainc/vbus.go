@@ -24,7 +24,13 @@ import (
 
 const (
 	passwordLength = 22
+	pathToInfo     = "system.info"
 )
+
+type vBusInfo struct {
+	Version		string	`json:"version"`
+	Hostname	string	`json:"hostname"`
+}
 
 // Represents a Json object
 type JsonObj = map[string]interface{} // an alias (needed for type conversion)
@@ -222,6 +228,32 @@ func testVbusUrl(url string) bool {
 		return true
 	} else {
 		return false
+	}
+}
+
+// Get Hostname from vBus
+func getHostnameFromvBus(url string) string {
+	if url == "" {
+		return ""
+	}
+	conn, err := nats.Connect(url, nats.UserInfo(anonymousUser, anonymousUser))
+	if err == nil {
+		var info vBusInfo
+		msg, err := conn.Request(pathToInfo, nil, 10*time.Second)
+		if err != nil {
+			_helpersLog.Debug("request vBus server info: failed")
+			return ""
+		}
+		if err := json.Unmarshal(msg.Data, &info); err != nil {
+			_helpersLog.Debug("unmarshal vBus server info: failed")
+			return ""
+		}
+		_helpersLog.Debug("vBus info:")
+		_helpersLog.Debug(info)
+		defer conn.Close()
+		return info.Hostname
+	} else {
+		return ""
 	}
 }
 
