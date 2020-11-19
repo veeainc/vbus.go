@@ -140,6 +140,7 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 		// check that we have a real hostname
 		// overwise we replace it with the remote hostname
 		if _, err := strconv.Atoi(c.hostname); err == nil {
+			c.hostname = c.remoteHostname
 			fmt.Printf("hostname: %q is a number. Probably a random\nSo replace it with the remote hostname: %s", c.hostname, c.remoteHostname)
 		}
 
@@ -175,6 +176,8 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 		// check that we have a real hostname
 		// overwise we replace it with the remote hostname
 		if _, err := strconv.Atoi(c.hostname); err == nil {
+			c.hostname = c.remoteHostname
+			config.Client.User = fmt.Sprintf("%s.%s", c.id, c.hostname)
 			fmt.Printf("hostname: %q is a number. Probably a random\nSo replace it with the remote hostname: %s", c.hostname, c.remoteHostname)
 		}
 
