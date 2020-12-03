@@ -3,15 +3,16 @@ package vBus
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"io/ioutil"
 	"net"
 	"os"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
-	"strconv"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
@@ -458,7 +459,11 @@ func (c *ExtendedNatsClient) getFromEnv(config *configuration) (url []string, ne
 // find vbus server  - strategy 3: try default url client://hostname:21400
 func (c *ExtendedNatsClient) getDefault(config *configuration) (url []string, newHost string, e error) {
 	url = []string{"nats://vbus.service.veeamesh.local:21400"}
-	newHost = getHostnameFromvBus(url[0])
+	newHost = ""
+	addr, err := net.LookupHost("vbus.service.veeamesh.local")
+	if err == nil && len(addr) > 0 {
+		newHost = getHostnameFromvBus(url[0], addr[0])
+	}
 	return url, newHost, nil
 }
 

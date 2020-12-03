@@ -28,8 +28,8 @@ const (
 )
 
 type vBusInfo struct {
-	Version		string	`json:"version"`
-	Hostname	string	`json:"hostname"`
+	Version  string `json:"version"`
+	Hostname string `json:"hostname"`
 }
 
 // Represents a Json object
@@ -232,14 +232,14 @@ func testVbusUrl(url string) bool {
 }
 
 // Get Hostname from vBus
-func getHostnameFromvBus(url string) string {
+func getHostnameFromvBus(url string, ip string) string {
 	if url == "" {
 		return ""
 	}
 	conn, err := nats.Connect(url, nats.UserInfo(anonymousUser, anonymousUser))
 	if err == nil {
 		var info vBusInfo
-		msg, err := conn.Request(pathToInfo, nil, 10*time.Second)
+		msg, err := conn.Request(pathToInfo, []byte(ip), 10*time.Second)
 		if err != nil {
 			_helpersLog.Debug("request vBus server info: failed")
 			return ""
