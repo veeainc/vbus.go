@@ -8,7 +8,6 @@ import (
 	"os"
 	"path"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +29,7 @@ const (
 var _natsLog = getNamedLogger()
 
 type ExtendedNatsClient struct {
+	isvh           bool              // true if running in a veeahub
 	hostname       string            // client hostname
 	remoteHostname string            // remote client server hostname
 	id             string            // app identifier
@@ -74,9 +74,11 @@ func WithUser(login, pwd string) natsConnectOption {
 
 // Constructor when the server and the client are running on the same system (same hostname).
 func NewExtendedNatsClient(appDomain, appId string) *ExtendedNatsClient {
-	hostname := sanitizeNatsSegment(getHostname())
+	hostname, isvh := getHostname()
+	hostname = sanitizeNatsSegment(hostname)
 
 	client := &ExtendedNatsClient{
+		isvh:           isvh,
 		hostname:       hostname,
 		remoteHostname: hostname,
 		id:             fmt.Sprintf("%s.%s", appDomain, appId),
@@ -140,10 +142,11 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 
 		// check that we have a real hostname
 		// overwise we replace it with the remote hostname
-		if _, err := strconv.Atoi(c.hostname); err == nil {
-			c.hostname = c.remoteHostname
-			fmt.Printf("hostname: %q is a number. Probably a random\nSo replace it with the remote hostname: %s", c.hostname, c.remoteHostname)
-		}
+		// if _, err := strconv.ParseInt(c.hostname, 16, 0); err == nil {
+		// 	fmt.Printf("hostname: %q is a number. Probably a random\nSo replace it with the remote hostname: %s", c.hostname, c.remoteHostname)
+		// 	c.hostname = c.remoteHostname
+		// 	config.Client.User = fmt.Sprintf("%s.%s", c.id, c.hostname)
+		// }
 
 		// connect with provided user info
 		c.client, err = nats.Connect(url,
@@ -176,11 +179,11 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 
 		// check that we have a real hostname
 		// overwise we replace it with the remote hostname
-		if _, err := strconv.ParseInt(c.hostname, 16, 0); err == nil {
-			fmt.Printf("hostname: %q is a number. Probably a random\nSo replace it with the remote hostname: %s", c.hostname, c.remoteHostname)
-			c.hostname = c.remoteHostname
-			config.Client.User = fmt.Sprintf("%s.%s", c.id, c.hostname)
-		}
+		// if _, err := strconv.ParseInt(c.hostname, 16, 0); err == nil {
+		// 	fmt.Printf("hostname: %q is a number. Probably a random\nSo replace it with the remote hostname: %s", c.hostname, c.remoteHostname)
+		// 	c.hostname = c.remoteHostname
+		// 	config.Client.User = fmt.Sprintf("%s.%s", c.id, c.hostname)
+		// }
 
 		err = c.saveConfigFile(config)
 		if err != nil {
@@ -456,21 +459,31 @@ func (c *ExtendedNatsClient) getFromEnv(config *configuration) (url []string, ne
 	return []string{c.env[envVbusUrl]}, "", nil
 }
 
-// find vbus server  - strategy 3: try default url client://hostname:21400
-func (c *ExtendedNatsClient) getDefault(config *configuration) (url []string, newHost string, e error) {
-	url = []string{"nats://vbus.service.veeamesh.local:21400"}
-	newHost = ""
-	addr, err := net.LookupHost("vbus.service.veeamesh.local")
-	if err == nil && len(addr) > 0 {
-		newHost = getHostnameFromvBus(url[0], addr[0])
-	}
-	return url, newHost, nil
+// find vbus server  - strategy 3: try default url client://hostname.service.veeamesh.local:21400
+func (c *ExtendedNatsClient) getlocalDefault(config *configuration) (url []string, newHost string, e error) {
+	url = []string{"nats://" + c.hostname + ".service.veeamesh.local:21400"}
+	return url, "", nil
 }
 
 // find vbus server  - strategy 4: find it using avahi
 func (c *ExtendedNatsClient) getFromZeroconf(config *configuration) (url []string, newHost string, e error) {
-	url, newHost, c.networkIp, e = zeroconfSearch()
+	if c.isvh == false {
+		url, newHost, c.networkIp, e = zeroconfSearch()
+	}
 	return
+}
+
+// find vbus server  - strategy 5: try global (MEN) url client://vbus.service.veeamesh.local:21400
+func (c *ExtendedNatsClient) getglobalDefault(config *configuration) (url []string, newHost string, e error) {
+	if c.isvh == false {
+		url = []string{"nats://vbus.service.veeamesh.local:21400"}
+		newHost = ""
+		addr, err := net.LookupHost("vbus.service.veeamesh.local")
+		if err == nil && len(addr) > 0 {
+			newHost = getHostnameFromvBus(url[0], addr[0])
+		}
+	}
+	return url, newHost, nil
 }
 
 func (c *ExtendedNatsClient) findVbusUrl(config *configuration) (serverUrl string, newHost string, e error) {
@@ -478,8 +491,9 @@ func (c *ExtendedNatsClient) findVbusUrl(config *configuration) (serverUrl strin
 		c.getFromHubId,
 		c.getFromEnv,
 		c.getFromConfigFile,
-		c.getDefault,
+		c.getlocalDefault,
 		c.getFromZeroconf,
+		c.getglobalDefault,
 	}
 
 	success := false
