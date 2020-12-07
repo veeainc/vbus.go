@@ -84,9 +84,10 @@ func joinPath(segments ...string) string {
 }
 
 // Retrieve the hostname
-func getHostname() string {
+func getHostname() (string, bool) {
 	hostnameLocal, _ := os.Hostname()
 	hostname := strings.Split(hostnameLocal, ".")[0]
+	isvh := false
 
 	dbusConn, err := dbus.SystemBus()
 	if err != nil {
@@ -98,12 +99,13 @@ func getHostname() string {
 			_helpersLog.WithFields(LF{"error": call.Err}).Warn("failed to get hostname on dbus")
 		}
 		err = call.Store(&hostname)
+		isvh = true
 		if err != nil {
 			_helpersLog.WithFields(LF{"error": err}).Warn("unable to store value")
 		}
 	}
 
-	return hostname
+	return hostname, isvh
 }
 
 func generatePassword() (string, error) {
@@ -223,6 +225,7 @@ func testVbusUrl(url string) bool {
 		return false
 	}
 	conn, err := nats.Connect(url, nats.UserInfo(anonymousUser, anonymousUser))
+	_helpersLog.Debug("client remote IP: " + conn.ConnectedAddr())
 	if err == nil {
 		defer conn.Close()
 		return true
