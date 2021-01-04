@@ -1,4 +1,4 @@
-module bitbucket.org/vbus/vbus.go
+module github.com/veeainc/vbus.go
 
 go 1.13
 
