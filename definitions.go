@@ -120,7 +120,7 @@ func NewErrorDefinitionWithDetail(code ErrorCode, message string, detail interfa
 
 // Parses a raw vbus node back to an error definition.
 func NewErrorFromVbus(node interface{}) *ErrorDefinition {
-	err :=  &ErrorDefinition{
+	err := &ErrorDefinition{
 		code:    ErrorCode(node.(JsonObj)["code"].(float64)), // numeric values are float64 when unmarshalled (Go)
 		message: node.(JsonObj)["message"].(string),
 	}
@@ -369,6 +369,17 @@ func (a *AttributeDef) Value() interface{} {
 	return a.value
 }
 
+// Add option to an existing attribute
+func (a *AttributeDef) AddOptions(options ...defOption) {
+	opts := getDefOptions(options...)
+	if opts.OnGet != nil {
+		a.onGet = opts.OnGet
+	}
+	if opts.OnSet != nil {
+		a.onSet = opts.OnSet
+	}
+}
+
 func (a *AttributeDef) searchPath(parts []string) IDefinition {
 	if len(parts) <= 0 {
 		return a
@@ -388,9 +399,9 @@ func (a *AttributeDef) handleSet(data interface{}, parts []string) (interface{},
 
 	if !result.Valid() {
 		_defLog.WithFields(LF{
-			"uuid": a.uuid,
+			"uuid":  a.uuid,
 			"value": data,
-			"error": result.Errors(),}).Warn("invalid value received for attribute")
+			"error": result.Errors()}).Warn("invalid value received for attribute")
 		return nil, nil
 	}
 
