@@ -44,14 +44,23 @@ type NatsCallback = func(data interface{}, segments []string) interface{}
 
 // ExtendedNatsClient options.
 type natsConnectOptions struct {
-	HubId    string
-	Login    string
-	Password string
+	HubId      string
+	Login      string
+	Password   string
+	Permission []string
 }
 
 // Check if option contains user information.
 func (o natsConnectOptions) hasUser() bool {
 	return o.Login != "" && o.Password != ""
+}
+
+// Check if option contains permission.
+func (o natsConnectOptions) hasPermission() bool {
+	if len(o.Permission) > 0 {
+		return true
+	}
+	return false
 }
 
 // Option is a function on the options for a connection.
@@ -69,6 +78,22 @@ func WithUser(login, pwd string) natsConnectOption {
 	return func(o *natsConnectOptions) {
 		o.Login = login
 		o.Password = pwd
+	}
+}
+
+// Connect with specified permission.
+func WithPermission(permission string) natsConnectOption {
+	return func(o *natsConnectOptions) {
+		o.Permission = append(o.Permission, permission)
+	}
+}
+
+// Connect with specified permission.
+func WithPermissionSlice(permissions []string) natsConnectOption {
+	return func(o *natsConnectOptions) {
+		for _, permission := range permissions {
+			o.Permission = append(o.Permission, permission)
+		}
 	}
 }
 
@@ -185,6 +210,12 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 		// 	config.Client.User = fmt.Sprintf("%s.%s", c.id, c.hostname)
 		// }
 
+		if opts.hasPermission() {
+			for _, permission := range opts.Permission {
+				addPermission(config, permission)
+			}
+		}
+
 		err = c.saveConfigFile(config)
 		if err != nil {
 			return errors.Wrap(err, "cannot save configuration")
@@ -208,11 +239,16 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 			c.client, err = nats.Connect(url,
 				nats.UserInfo(config.Client.User, config.Key.Private),
 				nats.Name(config.Client.User))
-		}
-		time.Sleep(1000 * time.Millisecond)
+		} else {
+			time.Sleep(1000 * time.Millisecond)
+			// either we pushed the default permission with the full account publish (if)
+			// or we resend it just in case... (here)
 
-		natsPath := fmt.Sprintf("system.authorization.%s.%s.%s.permissions.set", c.remoteHostname, c.id, c.hostname)
-		c.Request(natsPath, config.Client.Permissions, Timeout(10*time.Second), WithoutId(), WithoutHost())
+			natsPath := fmt.Sprintf("system.authorization.%s.%s.%s.permissions.set", c.remoteHostname, c.id, c.hostname)
+			c.Request(natsPath, config.Client.Permissions, Timeout(10*time.Second), WithoutId(), WithoutHost())
+
+			time.Sleep(2000 * time.Millisecond)
+		}
 
 		_natsLog.Debug("connected")
 		return err
@@ -339,17 +375,8 @@ func (c *ExtendedNatsClient) Subscribe(base string, cb NatsCallback, advOpts ...
 // Permissions
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Ask for the specified permission.
-func (c *ExtendedNatsClient) AskPermission(permission string) (bool, error) {
-	if permission == "" {
-		return false, errors.New("permission path empty")
-	}
-
-	config, err := c.readOrGetDefaultConfig()
-	if err != nil {
-		return false, errors.Wrap(err, "cannot read config")
-	}
-
+// Add permission to config file
+func addPermission(config *configuration, permission string) bool {
 	fileChanged := false
 
 	if !contains(config.Client.Permissions.Subscribe, permission) {
@@ -361,6 +388,22 @@ func (c *ExtendedNatsClient) AskPermission(permission string) (bool, error) {
 		config.Client.Permissions.Publish = append(config.Client.Permissions.Publish, permission)
 		fileChanged = true
 	}
+
+	return fileChanged
+}
+
+// Ask for the specified permission.
+func (c *ExtendedNatsClient) AskPermission(permission string) (bool, error) {
+	if permission == "" {
+		return false, errors.New("permission path empty")
+	}
+
+	config, err := c.readOrGetDefaultConfig()
+	if err != nil {
+		return false, errors.Wrap(err, "cannot read config")
+	}
+
+	fileChanged := addPermission(config, permission)
 
 	if fileChanged {
 		_natsLog.Debug("permissions changed, sending them to server")
