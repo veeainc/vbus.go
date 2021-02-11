@@ -232,6 +232,26 @@ func (np *NodeProxy) Tree() JsonObj {
 	return np.rawNode
 }
 
+func toRepr(rawJson JsonObj) JsonObj {
+	repr := JsonObj{}
+
+	for k, v := range rawJson {
+		if IsAttribute(v){
+			repr[k] = v.(JsonObj)["value"]
+		} else if IsNode(v){
+			repr[k] = toRepr(v.(JsonObj))
+		}	
+	}
+
+	return repr
+}
+
+// Get simplified json tree.
+func (np *NodeProxy) Json() JsonObj {
+	return toRepr(np.rawNode)
+}
+
+
 // Subscribe to the add event.
 func (np *NodeProxy) SubscribeAdd(cb ProxySubCallback, parts ...string) error {
 	return np.subscribeToEvent(cb, notifAdded, parts...)
