@@ -505,6 +505,10 @@ func (c *ExtendedNatsClient) getFromEnv(config *configuration) (url []string, ne
 // find vbus server  - strategy 3: try default url client://hostname.service.veeamesh.local:21400
 func (c *ExtendedNatsClient) getlocalDefault(config *configuration) (url []string, newHost string, e error) {
 	url = []string{"nats://" + c.hostname + ".service.veeamesh.local:21400"}
+	addr, err := net.LookupHost(c.hostname + "-host.service.veeamesh.local")
+	if err == nil && len(addr) > 0 {
+		c.networkIp = addr[0]
+	}
 	return url, "", nil
 }
 
@@ -524,6 +528,7 @@ func (c *ExtendedNatsClient) getglobalDefault(config *configuration) (url []stri
 		addr, err := net.LookupHost("vbus.service.veeamesh.local")
 		if err == nil && len(addr) > 0 {
 			newHost = getHostnameFromvBus(url[0], addr[0])
+			c.networkIp = addr[0]
 		}
 	}
 	return url, newHost, nil

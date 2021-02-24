@@ -494,6 +494,23 @@ func (nm *NodeManager) GetRemoteElementWithTimeout(timeout time.Duration, parts 
 	return NewNodeProxy(nm.client, "", JsonObj{}).GetElementWithTimeout(timeout, parts...)
 }
 
+// Retrieve the network IP
+func (nm *NodeManager) GetNetworkIP() (string, error) {
+	conf, err := nm.client.readOrGetDefaultConfig()
+	if err != nil {
+		return "", err
+	}
+
+	networkIP := conf.Vbus.NetworkIp
+
+	if networkIP == "" {
+		return "", errors.New("no network IP available")
+	}
+
+	return networkIP, nil
+
+}
+
 // Expose a service identified with an uri on Vbus.
 func (nm *NodeManager) Expose(name, protocol string, port int, path string) error {
 	conf, err := nm.client.readOrGetDefaultConfig()
