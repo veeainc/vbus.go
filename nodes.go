@@ -108,6 +108,29 @@ func (n *Node) AddNode(uuid string, rawNode RawNode, options ...defOption) (*Nod
 	return node, nil
 }
 
+// Create a child node in Vbus
+// but do not publish the node
+// Returns: a new node
+func (n *Node) CreateNode(uuid string, rawNode RawNode, options ...defOption) *Node {
+	def := NewNodeDef(rawNode, options...)  // create the definition
+	node := NewNode(n.client, uuid, def, n) // create the connected node
+	n.definition.AddChild(uuid, def)        // add it
+
+	return node
+}
+
+// Publish the node previously created with CreateNode
+// Returns: a new node
+func (n *Node) PublishNode(node *Node) error {
+	// send the node definition on Vbus
+	packet := JsonObj{node.uuid: node.getDefinition().ToRepr()}
+	err := n.client.Publish(joinPath(n.GetPath(), notifAdded), packet)
+	if err != nil {
+		return errors.Wrap(err, "cannot publish new node")
+	}
+	return nil
+}
+
 // Add a child attribute and notify Vbus
 func (n *Node) AddAttribute(uuid string, value interface{}, options ...defOption) (*Attribute, error) {
 	def := NewAttributeDef(uuid, value, options...) // create the definition
@@ -122,6 +145,28 @@ func (n *Node) AddAttribute(uuid string, value interface{}, options ...defOption
 	}
 
 	return node, nil
+}
+
+// Create a child attribute in Vbus
+// but do not publish the attribute
+// returns: attribute
+func (n *Node) CreateAttribute(uuid string, value interface{}, options ...defOption) *Attribute {
+	def := NewAttributeDef(uuid, value, options...) // create the definition
+	node := NewAttribute(n.client, uuid, def, n)    // create the connected node
+	n.definition.AddChild(uuid, def)                // add it
+	return node
+}
+
+// Publish the attribute previously created with CreateAttribute
+// Returns: error
+func (n *Node) PublishAttribute(node *Attribute) error {
+	// send the node definition on Vbus
+	packet := JsonObj{node.uuid: node.getDefinition().ToRepr()}
+	err := n.client.Publish(joinPath(n.GetPath(), notifAdded), packet)
+	if err != nil {
+		return errors.Wrap(err, "cannot publish new attribute")
+	}
+	return nil
 }
 
 // Add a child method node and notify Vbus
@@ -140,6 +185,30 @@ func (n *Node) AddMethod(uuid string, method MethodDefCallback) (*Method, error)
 	}
 
 	return node, nil
+}
+
+// Create a child method node but do not publish on Vbus
+// The method must be a func(args..., path []string)
+// The last argument is mandatory, it will receive the split Nats path.
+func (n *Node) CreateMethod(uuid string, method MethodDefCallback) *Method {
+	// send the node definition on Vbus
+	def := NewMethodDef(method)               // create the definition
+	node := NewMethod(n.client, uuid, def, n) // create the connected node
+	n.definition.AddChild(uuid, def)          // add it
+
+	return node
+}
+
+// Publish the method previously created with CreateMethod
+// Returns: error
+func (n *Node) PublishMethod(node *Method) error {
+	// send the node definition on Vbus
+	packet := JsonObj{node.uuid: node.getDefinition().ToRepr()}
+	err := n.client.Publish(joinPath(n.GetPath(), notifAdded), packet)
+	if err != nil {
+		return errors.Wrap(err, "cannot publish new method")
+	}
+	return nil
 }
 
 func (n *Node) GetAttribute(parts ...string) (*Attribute, error) {
