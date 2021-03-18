@@ -157,6 +157,17 @@ func (n *Node) CreateAttribute(uuid string, value interface{}, options ...defOpt
 	return node
 }
 
+// Create a child attribute in Vbus with json schema
+// but do not publish the attribute
+// returns: attribute
+func (n *Node) CreateAttributeWithSchema(uuid string, value interface{}, schema map[string]interface{}, options ...defOption) *Attribute {
+	def := NewAttributeDefWithSchema(uuid, value, schema, options...) // create the definition
+	node := NewAttribute(n.client, uuid, def, n)    // create the connected node
+	n.definition.AddChild(uuid, def)                // add it
+	return node
+}
+
+
 // Publish the attribute previously created with CreateAttribute
 // Returns: error
 func (n *Node) PublishAttribute(node *Attribute) error {

@@ -350,13 +350,14 @@ func NewAttributeDef(uuid string, value interface{}, options ...defOption) *Attr
 
 // Creates an attribute definition with a specific Json-Schema
 func NewAttributeDefWithSchema(uuid string, value interface{}, schema map[string]interface{},
-	onSet SetCallback, onGet GetCallback) *AttributeDef {
+	options ...defOption) *AttributeDef {
+	opts := getDefOptions(options...)
 	return &AttributeDef{
 		uuid:   uuid,
 		value:  value,
 		schema: schema,
-		onSet:  onSet,
-		onGet:  onGet}
+		onSet:  opts.OnSet,
+		onGet:  opts.OnGet}
 }
 
 // Get uuid.
