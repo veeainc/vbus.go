@@ -210,6 +210,18 @@ func (n *Node) CreateMethod(uuid string, method MethodDefCallback) *Method {
 	return node
 }
 
+// Create a child method in Vbus with json schema
+// but do not publish the method
+// returns: method
+func (n *Node) CreateMethodWithSchema(uuid string, paramsSchema  map[string]interface{}, returnsSchema map[string]interface{}, method MethodDefCallback) *Method {
+	// send the node definition on Vbus
+	def := NewMethodDefWithSchema(method, paramsSchema, returnsSchema)               // create the definition
+	node := NewMethod(n.client, uuid, def, n) // create the connected node
+	n.definition.AddChild(uuid, def)          // add it
+
+	return node
+}
+
 // Publish the method previously created with CreateMethod
 // Returns: error
 func (n *Node) PublishMethod(node *Method) error {
