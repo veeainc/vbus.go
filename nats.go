@@ -1,6 +1,7 @@
 package vBus
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -16,6 +17,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/bcrypt"
+	"gopkg.in/square/go-jose.v2/jwt"
 )
 
 const (
@@ -37,6 +39,7 @@ type ExtendedNatsClient struct {
 	rootFolder     string            // config folder root
 	client         *nats.Conn        // client handle
 	networkIp      string            // public network ip, populated during mdns discovery
+	creds          string            // creds file
 }
 
 // A Nats callback, that take data and path segment
@@ -98,17 +101,51 @@ func WithPermissionSlice(permissions []string) natsConnectOption {
 }
 
 // Constructor when the server and the client are running on the same system (same hostname).
-func NewExtendedNatsClient(appDomain, appId string) *ExtendedNatsClient {
+func NewExtendedNatsClient(domainOrCredsFile, appId string) *ExtendedNatsClient {
 	hostname, isvh := getHostname()
 	hostname = sanitizeNatsSegment(hostname)
+	iD := ""
+	creds := ""
+	if appId == "" {
+		f, err := os.Open(domainOrCredsFile)
+		if err != nil {
+			fmt.Printf("%v file doesn't exist", domainOrCredsFile)
+			return nil
+		}
+		credFile := bufio.NewScanner(f)
+		nextIsJWT := false
+		for credFile.Scan() {
+			line := credFile.Text()
+			//fmt.Printf(line)
+			if nextIsJWT == true {
+				// decode JWT token without verifying the signature
+				var claims map[string]interface{}
+				token, _ := jwt.ParseSigned(line)
+				_ = token.UnsafeClaimsWithoutVerification(&claims)
+				//fmt.Println("map:", claims)
+				iD = claims["name"].(string)
+				break
+			}
+			if line == "-----BEGIN NATS USER JWT-----" {
+				nextIsJWT = true
+			}
+		}
+		if iD == "" {
+			return nil
+		}
+		creds = domainOrCredsFile
+	} else {
+		iD = fmt.Sprintf("%s.%s", domainOrCredsFile, appId)
+	}
 
 	client := &ExtendedNatsClient{
 		isvh:           isvh,
 		hostname:       hostname,
 		remoteHostname: hostname,
-		id:             fmt.Sprintf("%s.%s", appDomain, appId),
+		id:             iD,
 		env:            readEnvVar(),
 		client:         nil,
+		creds:          creds,
 	}
 
 	client.rootFolder = client.env[envVbusPath]
@@ -178,6 +215,48 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 			nats.UserInfo(opts.Login, opts.Password),
 			nats.Name(opts.Login))
 		return err
+	} else if c.creds != "" {
+		// connect with credential file
+		config, err := c.getClientConfig()
+		if err != nil {
+			return errors.Wrap(err, "cannot retrieve configuration")
+		}
+
+		newClient, url, newHost, err := c.discovervBusRoute(&config.Vbus)
+		if err != nil {
+			return errors.Wrap(err, "cannot find vbus url")
+		}
+		c.client = newClient
+
+		// update the config file with the new url
+		config.Vbus.Url = url
+
+		if c.networkIp != "" {
+			config.Vbus.NetworkIp = c.networkIp
+		}
+
+		// check if we need to update remote host
+		if newHost != "" {
+			c.remoteHostname = sanitizeNatsSegment(newHost)
+		}
+		config.Vbus.Hostname = c.remoteHostname
+
+		err = c.saveClientsConfigFile(config)
+		if err != nil {
+			return errors.Wrap(err, "cannot save client configuration")
+		}
+
+		// try to connect directly and push user if fail
+		// connect with user in config file
+		c.client, err = nats.Connect(url, nats.UserCredentials(c.creds))
+		if err != nil {
+			_natsLog.Debug("unable to connect with credential files")
+		} else {
+			_natsLog.Debug("connected")
+		}
+
+		return err
+
 	} else {
 		config, err := c.readOrGetDefaultConfig()
 		if err != nil {

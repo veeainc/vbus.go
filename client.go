@@ -38,8 +38,8 @@ func getClientOptions(opt ...natsClientOption) natsClientOptions {
 }
 
 // Creates a new client with options.
-func NewClient(domain, appId string, opt ...natsClientOption) *Client {
-	nats := NewExtendedNatsClient(domain, appId)
+func NewClient(domainOrCredsFile, appId string, opt ...natsClientOption) *Client {
+	nats := NewExtendedNatsClient(domainOrCredsFile, appId)
 	opts := getClientOptions(opt...)
 	return &Client{
 		nats:        nats,
