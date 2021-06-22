@@ -248,12 +248,12 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 
 		// try to connect directly and push user if fail
 		// connect with user in config file
-		c.client, err = nats.Connect(url, nats.UserCredentials(c.creds))
-		if err != nil {
-			_natsLog.Debug("unable to connect with credential files")
-		} else {
-			_natsLog.Debug("connected")
-		}
+		// c.client, err = nats.Connect(url, nats.UserCredentials(c.creds))
+		// if err != nil {
+		// 	_natsLog.Debug("unable to connect with credential files")
+		// } else {
+		// 	_natsLog.Debug("connected")
+		// }
 
 		return err
 
