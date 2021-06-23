@@ -18,11 +18,11 @@ const (
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // test access to server
-func testRoute(url string) *nats.Conn {
+func (c *ExtendedNatsClient) testRoute(url string) *nats.Conn {
 	if url == "" {
 		return nil
 	}
-	conn, err := nats.Connect(url)
+	conn, err := nats.Connect(url, nats.UserCredentials(c.creds))
 	_helpersLog.Debug("client remote IP: " + conn.ConnectedAddr())
 	if err == nil {
 		//defer conn.Close()
@@ -99,7 +99,7 @@ func (c *ExtendedNatsClient) discovervBusRoute(config *vbusRoute) (client *nats.
 
 		urls, newHost, e = strategy(config)
 		for _, url := range urls {
-			client = testRoute(url)
+			client = c.testRoute(url)
 			if client == nil {
 				_natsLog.WithFields(LF{"discover": getFunctionName(strategy), "url": url}).Info("url found")
 				success = true
