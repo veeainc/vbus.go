@@ -82,7 +82,7 @@ func (c *ExtendedNatsClient) fromGlobalDNS(config *vbusRoute) (url []string, new
 
 func (c *ExtendedNatsClient) discovervBusRoute(config *vbusRoute) (client *nats.Conn, serverUrl string, newHost string, e error) {
 	findServerUrlStrategies := []func(config *vbusRoute) (url []string, newHost string, e error){
-		//c.fromHubId,
+		c.fromHubId,
 		c.fromEnv,
 		c.fromConfigFile,
 		c.fromLocalDNS,
@@ -100,7 +100,7 @@ func (c *ExtendedNatsClient) discovervBusRoute(config *vbusRoute) (client *nats.
 		urls, newHost, e = strategy(config)
 		for _, url := range urls {
 			client = c.testRoute(url)
-			if client == nil {
+			if client != nil {
 				_natsLog.WithFields(LF{"discover": getFunctionName(strategy), "url": url}).Info("url found")
 				success = true
 				serverUrl = url
