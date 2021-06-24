@@ -39,7 +39,17 @@ func getClientOptions(opt ...natsClientOption) natsClientOptions {
 
 // Creates a new client with options.
 func NewClient(domainOrCredsFile, appId string, opt ...natsClientOption) *Client {
-	nats := NewExtendedNatsClient(domainOrCredsFile, appId)
+	nats := NewExtendedNatsClient(domainOrCredsFile, appId, "")
+	opts := getClientOptions(opt...)
+	return &Client{
+		nats:        nats,
+		NodeManager: NewNodeManager(nats, opts),
+		options:     opts,
+	}
+}
+
+func NewJWTClient(JWT string, opt ...natsClientOption) *Client {
+	nats := NewExtendedNatsClient("", "", JWT)
 	opts := getClientOptions(opt...)
 	return &Client{
 		nats:        nats,

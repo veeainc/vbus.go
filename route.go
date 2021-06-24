@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nkeys"
 	"github.com/pkg/errors"
 )
 
@@ -17,12 +18,26 @@ const (
 // Route - local vBus discovery
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+func (c *ExtendedNatsClient) userFromJWT() (string, error) {
+	return nkeys.ParseDecoratedJWT([]byte(c.jwt))
+}
+
+func (c *ExtendedNatsClient) signFromJWT([]byte) ([]byte, error) {
+	return []byte{}, nil
+}
+
 // test access to server
 func (c *ExtendedNatsClient) testRoute(url string) *nats.Conn {
+	var conn *nats.Conn
+	var err error
 	if url == "" {
 		return nil
 	}
-	conn, err := nats.Connect(url, nats.UserCredentials(c.creds))
+	if c.jwt != "" {
+		conn, err = nats.Connect(url, nats.UserJWT(c.userFromJWT, c.signFromJWT))
+	} else {
+		conn, err = nats.Connect(url, nats.UserCredentials(c.creds))
+	}
 	_helpersLog.Debug("client remote IP: " + conn.ConnectedAddr())
 	if err == nil {
 		//defer conn.Close()
@@ -48,6 +63,9 @@ func (c *ExtendedNatsClient) fromHubId(config *vbusRoute) (url []string, newHost
 
 // find Vbus server - strategy 1: get url from config file
 func (c *ExtendedNatsClient) fromConfigFile(config *vbusRoute) (url []string, newHost string, e error) {
+	if config == nil {
+		return []string{}, "", nil
+	}
 	return []string{config.Url}, config.Hostname, nil
 }
 

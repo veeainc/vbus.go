@@ -40,6 +40,7 @@ type ExtendedNatsClient struct {
 	client         *nats.Conn        // client handle
 	networkIp      string            // public network ip, populated during mdns discovery
 	creds          string            // creds file
+	jwt            string            // jwt string
 }
 
 // A Nats callback, that take data and path segment
@@ -101,12 +102,23 @@ func WithPermissionSlice(permissions []string) natsConnectOption {
 }
 
 // Constructor when the server and the client are running on the same system (same hostname).
-func NewExtendedNatsClient(domainOrCredsFile, appId string) *ExtendedNatsClient {
+func NewExtendedNatsClient(domainOrCredsFile, appId, JWT string) *ExtendedNatsClient {
 	hostname, isvh := getHostname()
 	hostname = sanitizeNatsSegment(hostname)
 	iD := ""
 	creds := ""
-	if appId == "" {
+	jwToken := ""
+	if JWT != "" {
+		var claims map[string]interface{}
+		token, _ := jwt.ParseSigned(JWT)
+		_ = token.UnsafeClaimsWithoutVerification(&claims)
+		//fmt.Println("map:", claims)
+		iD = claims["name"].(string)
+		if iD == "" {
+			return nil
+		}
+		jwToken = JWT
+	} else if appId == "" {
 		f, err := os.Open(domainOrCredsFile)
 		if err != nil {
 			fmt.Printf("%v file doesn't exist", domainOrCredsFile)
@@ -146,6 +158,7 @@ func NewExtendedNatsClient(domainOrCredsFile, appId string) *ExtendedNatsClient 
 		env:            readEnvVar(),
 		client:         nil,
 		creds:          creds,
+		jwt:            jwToken,
 	}
 
 	client.rootFolder = client.env[envVbusPath]
@@ -214,6 +227,15 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 		c.client, err = nats.Connect(url,
 			nats.UserInfo(opts.Login, opts.Password),
 			nats.Name(opts.Login))
+		return err
+	} else if c.jwt != "" {
+		// connect with jwt file
+		// not storing any config file since jwt connection are supposed to be "remote"
+		newClient, _, _, err := c.discovervBusRoute(nil)
+		if err != nil {
+			return errors.Wrap(err, "cannot find vbus url")
+		}
+		c.client = newClient
 		return err
 	} else if c.creds != "" {
 		// connect with credential file

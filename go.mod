@@ -13,6 +13,7 @@ require (
 	github.com/miekg/dns v1.1.42 // indirect
 	github.com/nats-io/nats-server/v2 v2.2.6 // indirect
 	github.com/nats-io/nats.go v1.11.0
+	github.com/nats-io/nkeys v0.3.0
 	github.com/onsi/ginkgo v1.16.4 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.8.1
