@@ -3,7 +3,6 @@ module github.com/veeainc/vbus.go
 go 1.13
 
 require (
-	bitbucket.org/vbus/vbus.go v1.4.4
 	github.com/alecthomas/jsonschema v0.0.0-20200127222324-dd4542c1f589
 	github.com/godbus/dbus v4.1.0+incompatible
 	github.com/grandcat/zeroconf v1.0.0
