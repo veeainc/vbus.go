@@ -508,7 +508,7 @@ func (nm *NodeManager) Initialize() error {
 		return Index(vs, t) >= 0
 	}
 	addSubscriber := func(subscriber string) {
-		if Include(nm.client.subscriberList, subscriber) {
+		if Include(nm.client.subscriberList, subscriber) == false {
 			_nodesLog.Info(string("add " + subscriber + " to subscribers list"))
 			nm.client.subscriberList = append(nm.client.subscriberList, subscriber)
 		} else {

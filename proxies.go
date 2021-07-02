@@ -82,7 +82,7 @@ func (p *ProxyBase) subscribeToEvent(cb ProxySubCallback, event string, parts ..
 	// if domain different => different account => request a wired subscribe
 	pathSplit := strings.Split(natsPath, ".")
 	if pathSplit[0] != strings.Split(p.client.id, ".")[0] {
-		p.client.Publish(pathSplit[0]+"."+pathSplit[1]+".subscribe.add", p.client.id)
+		p.client.Publish(pathSplit[0]+"."+pathSplit[1]+".subscribe.add", p.client.id, WithoutHost(), WithoutId())
 		// modify local redirection
 		redirectPath = p.client.id + "."
 		natsPath = redirectPath + natsPath
