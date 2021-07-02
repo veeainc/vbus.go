@@ -3,6 +3,7 @@
 package vBus
 
 import (
+	"strings"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -76,10 +77,21 @@ func (p *ProxyBase) Unsubscribe() error {
 // It subscribe to an event (i.e. "add", "del", etc...) with a callback.
 func (p *ProxyBase) subscribeToEvent(cb ProxySubCallback, event string, parts ...string) error {
 	natsPath := joinPath(p.path, joinPath(parts...), event)
+	redirectPath := ""
+
+	// if domain different => different account => request a wired subscribe
+	pathSplit := strings.Split(natsPath, ".")
+	if pathSplit[0] != strings.Split(p.client.id, ".")[0] {
+		p.client.Publish(pathSplit[0]+"."+pathSplit[1]+".subscribe.add", p.client.id)
+		// modify local redirection
+		redirectPath = p.client.id + "."
+		natsPath = redirectPath + natsPath
+	}
 
 	sub, err := p.client.Subscribe(natsPath, func(rawNode interface{}, segments []string) interface{} {
 		if js, ok := rawNode.(JsonAny); ok {
-			node := NewUnknownProxy(p.client, p.path, js)
+			path := strings.TrimLeft(p.path, redirectPath)
+			node := NewUnknownProxy(p.client, path, js)
 			cb(node, segments...)
 		}
 		return nil
@@ -236,11 +248,11 @@ func toRepr(rawJson JsonObj) JsonObj {
 	repr := JsonObj{}
 
 	for k, v := range rawJson {
-		if IsAttribute(v){
+		if IsAttribute(v) {
 			repr[k] = v.(JsonObj)["value"]
-		} else if IsNode(v){
+		} else if IsNode(v) {
 			repr[k] = toRepr(v.(JsonObj))
-		}	
+		}
 	}
 
 	return repr
@@ -250,7 +262,6 @@ func toRepr(rawJson JsonObj) JsonObj {
 func (np *NodeProxy) Json() JsonObj {
 	return toRepr(np.rawNode)
 }
-
 
 // Subscribe to the add event.
 func (np *NodeProxy) SubscribeAdd(cb ProxySubCallback, parts ...string) error {

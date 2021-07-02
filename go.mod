@@ -7,6 +7,7 @@ require (
 	github.com/godbus/dbus v4.1.0+incompatible
 	github.com/grandcat/zeroconf v1.0.0
 	github.com/mattn/go-colorable v0.1.8 // indirect
+	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
 	github.com/miekg/dns v1.1.42 // indirect
 	github.com/nats-io/nats-server/v2 v2.2.6 // indirect
 	github.com/nats-io/nats.go v1.11.0

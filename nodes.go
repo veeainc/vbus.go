@@ -162,11 +162,10 @@ func (n *Node) CreateAttribute(uuid string, value interface{}, options ...defOpt
 // returns: attribute
 func (n *Node) CreateAttributeWithSchema(uuid string, value interface{}, schema map[string]interface{}, options ...defOption) *Attribute {
 	def := NewAttributeDefWithSchema(uuid, value, schema, options...) // create the definition
-	node := NewAttribute(n.client, uuid, def, n)    // create the connected node
-	n.definition.AddChild(uuid, def)                // add it
+	node := NewAttribute(n.client, uuid, def, n)                      // create the connected node
+	n.definition.AddChild(uuid, def)                                  // add it
 	return node
 }
-
 
 // Publish the attribute previously created with CreateAttribute
 // Returns: error
@@ -213,11 +212,11 @@ func (n *Node) CreateMethod(uuid string, method MethodDefCallback) *Method {
 // Create a child method in Vbus with json schema
 // but do not publish the method
 // returns: method
-func (n *Node) CreateMethodWithSchema(uuid string, paramsSchema  map[string]interface{}, returnsSchema map[string]interface{}, method MethodDefCallback) *Method {
+func (n *Node) CreateMethodWithSchema(uuid string, paramsSchema map[string]interface{}, returnsSchema map[string]interface{}, method MethodDefCallback) *Method {
 	// send the node definition on Vbus
-	def := NewMethodDefWithSchema(method, paramsSchema, returnsSchema)               // create the definition
-	node := NewMethod(n.client, uuid, def, n) // create the connected node
-	n.definition.AddChild(uuid, def)          // add it
+	def := NewMethodDefWithSchema(method, paramsSchema, returnsSchema) // create the definition
+	node := NewMethod(n.client, uuid, def, n)                          // create the connected node
+	n.definition.AddChild(uuid, def)                                   // add it
 
 	return node
 }
@@ -493,6 +492,55 @@ func (nm *NodeManager) Initialize() error {
 		_, err = nm.AddMethod("static", getVbusStaticMethod(nm.opts))
 		if err != nil {
 			return errors.Wrap(err, "cannot register file server method")
+		}
+	}
+
+	// manage Subscriber List from nats-server
+	Index := func(vs []string, t string) int {
+		for i, v := range vs {
+			if v == t {
+				return i
+			}
+		}
+		return -1
+	}
+	Include := func(vs []string, t string) bool {
+		return Index(vs, t) >= 0
+	}
+	addSubscriber := func(subscriber string) {
+		if Include(nm.client.subscriberList, subscriber) {
+			_nodesLog.Info(string("add " + subscriber + " to subscribers list"))
+			nm.client.subscriberList = append(nm.client.subscriberList, subscriber)
+		} else {
+			_nodesLog.Info(string(subscriber + " is already in subscribers list"))
+		}
+	}
+
+	sub, err = nm.client.Subscribe("subscribe.add", func(data interface{}, segments []string) interface{} {
+		addSubscriber(data.(string))
+		return nil
+	}, WithoutHost())
+	if err != nil {
+		return errors.Wrap(err, "cannot subscribe to subscribe.add")
+	}
+	nm.subs = append(nm.subs, sub) // save sub
+
+	elem, err := nm.Discover(nm.client.id+".subscribe.get", 1*time.Second)
+	if err != nil {
+		return errors.Wrap(err, "cannot discover Subscriber list")
+	}
+	if elem.IsNode() {
+		subscriberList := elem.AsNode()
+		for host, elem := range subscriberList.Elements() {
+			_nodesLog.Info("Subscribers from " + host)
+			subs := elem.String()
+			var dat []string
+			if err := json.Unmarshal([]byte(subs), &dat); err != nil {
+				panic(err)
+			}
+			for _, sub := range dat {
+				addSubscriber(sub)
+			}
 		}
 	}
 

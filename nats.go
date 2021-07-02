@@ -41,6 +41,7 @@ type ExtendedNatsClient struct {
 	networkIp      string            // public network ip, populated during mdns discovery
 	creds          string            // creds file
 	jwt            string            // jwt string
+	subscriberList []string          // list of subscriber redirection
 }
 
 // A Nats callback, that take data and path segment
@@ -430,6 +431,9 @@ func (c *ExtendedNatsClient) Request(base string, data interface{}, advOpts ...A
 func (c *ExtendedNatsClient) Publish(base string, data interface{}, advOpts ...AdvOption) error {
 	opts := getAdvOptions(advOpts...)
 	natsPath := c.getPath(base, opts)
+	for _, subs := range c.subscriberList {
+		c.client.Publish(subs+"."+natsPath, toVbus(data))
+	}
 	return c.client.Publish(natsPath, toVbus(data))
 }
 
