@@ -674,14 +674,15 @@ func (nm *NodeManager) Expose(name, protocol string, port int, path string) erro
 	uri := fmt.Sprintf("%v://%v:%v/%v", protocol, networkIp, port, path)
 
 	if nm.urisNode == nil {
-		node, err := nm.AddNode(exposeNodeUuid, RawNode{})
+		_, err = nm.AddNode(exposeNodeUuid, RawNode{
+			name: uri,
+		})
 		if err != nil {
 			return errors.Wrap(err, "cannot create 'uris' node")
 		}
-		nm.urisNode = node
+	} else {
+		_, err = nm.urisNode.AddAttribute(name, uri)
 	}
-
-	_, err = nm.urisNode.AddAttribute(name, uri)
 
 	if err == nil {
 		_nodesLog.WithField("uri", uri).Info("successfully exposed service")
