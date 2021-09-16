@@ -187,12 +187,14 @@ func (ap *AttributeProxy) SetValue(value interface{}) error {
 
 // Get remote value.
 func (ap *AttributeProxy) ReadValue() (interface{}, error) {
-	return ap.client.Request(joinPath(ap.GetPath(), notifValueGet), nil, WithoutHost(), WithoutId())
+	return handleVbusErrorIfAny(
+		ap.client.Request(joinPath(ap.GetPath(), notifValueGet), nil, WithoutHost(), WithoutId()))
 }
 
 // Get remote value with timeout.
 func (ap *AttributeProxy) ReadValueWithTimeout(timeout time.Duration) (interface{}, error) {
-	return ap.client.Request(joinPath(ap.GetPath(), notifValueGet), nil, Timeout(timeout), WithoutHost(), WithoutId())
+	return handleVbusErrorIfAny(
+		ap.client.Request(joinPath(ap.GetPath(), notifValueGet), nil, Timeout(timeout), WithoutHost(), WithoutId()))
 }
 
 // Subscribe to the set event.

@@ -234,6 +234,12 @@ func (n *Node) PublishMethod(node *Method) error {
 	return nil
 }
 
+// Call the  method with some arguments.
+func (m *Method) Call(args ...interface{}) (interface{}, error) {
+	return handleVbusErrorIfAny(
+		m.client.Request(joinPath(m.GetPath(), notifSetted), args, WithoutHost(), WithoutId()))
+}
+
 func (n *Node) GetAttribute(parts ...string) (*Attribute, error) {
 	def := n.definition.searchPath(parts)
 	if def == nil {
