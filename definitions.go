@@ -193,6 +193,7 @@ func isErrorDefinition(node interface{}) bool {
 type MethodDef struct { // implements IDefinition
 	method        MethodDefCallback
 	name          string
+	title         string
 	paramsSchema  JsonObj
 	returnsSchema JsonObj
 }
@@ -205,6 +206,24 @@ func NewMethodDef(method MethodDefCallback) *MethodDef {
 	md := &MethodDef{
 		method:        method,
 		name:          getFunctionName(method),
+		paramsSchema:  nil,
+		returnsSchema: nil,
+	}
+
+	err := md.inspectMethod()
+	if err != nil {
+		panic(errors.Wrap(err, "invalid method signature"))
+	}
+
+	return md
+}
+
+// Creates a new method definition with a title.
+func NewMethodDefWithTitle(method MethodDefCallback, title string) *MethodDef {
+	md := &MethodDef{
+		method:        method,
+		name:          getFunctionName(method),
+		title:         title,
 		paramsSchema:  nil,
 		returnsSchema: nil,
 	}
@@ -283,6 +302,10 @@ func (md *MethodDef) inspectMethod() error {
 		"type":  "array",
 		"items": paramsSchema,
 	}
+	if md.title != "" {
+		md.paramsSchema["title"] = md.title
+	}
+
 	md.returnsSchema = structToJsonObj(returnSchema)
 	return nil
 }
@@ -339,6 +362,24 @@ func NewAttributeDef(uuid string, value interface{}, options ...defOption) *Attr
 	}
 
 	schema := jsonschema.Reflect(value)
+	return &AttributeDef{
+		uuid:   uuid,
+		value:  value,
+		schema: schema,
+		onSet:  opts.OnSet,
+		onGet:  opts.OnGet,
+	}
+}
+
+// Creates an attribute definition with an inferred Json-Schema
+func NewAttributeDefWithTitle(uuid string, value interface{}, title string, options ...defOption) *AttributeDef {
+	opts := getDefOptions(options...)
+	if value == nil {
+		_defLog.WithFields(LF{"uuid": uuid}).Warn("no value provided, no json schema can be inferred, use NewAttributeDefWithSchema")
+	}
+
+	schema := jsonschema.Reflect(value)
+	schema.Title = title
 	return &AttributeDef{
 		uuid:   uuid,
 		value:  value,
