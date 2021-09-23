@@ -246,7 +246,7 @@ func (n *Node) PublishMethod(node *Method) error {
 // Call the  method with some arguments.
 func (m *Method) Call(args ...interface{}) (interface{}, error) {
 	return handleVbusErrorIfAny(
-		m.client.Request(joinPath(m.GetPath(), notifSetted), args, WithoutHost(), WithoutId()))
+		m.client.Request(joinPath(m.GetPath(), notifSetted), args))
 }
 
 func (n *Node) GetAttribute(parts ...string) (*Attribute, error) {
