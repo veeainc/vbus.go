@@ -209,6 +209,16 @@ func (n *Node) CreateMethod(uuid string, method MethodDefCallback) *Method {
 	return node
 }
 
+// Create a child method node with a specific title but do not publish on Vbus
+func (n *Node) CreateMethodWithTitle(uuid string, title string, method MethodDefCallback) *Method {
+	// send the node definition on Vbus
+	def := NewMethodDefWithTitle(method, title) // create the definition
+	node := NewMethod(n.client, uuid, def, n)   // create the connected node
+	n.definition.AddChild(uuid, def)            // add it
+
+	return node
+}
+
 // Create a child method in Vbus with json schema
 // but do not publish the method
 // returns: method

@@ -50,6 +50,7 @@ type GetCallback = func(data interface{}, segment []string) interface{}
 type DefOptions struct {
 	OnSet SetCallback
 	OnGet GetCallback
+	Title string
 }
 
 // Option is a function on the options for a connection.
@@ -67,12 +68,19 @@ func OnSet(g SetCallback) defOption {
 	}
 }
 
+func Title(title string) defOption {
+	return func(o *DefOptions) {
+		o.Title = title
+	}
+}
+
 // Retrieve all options to a struct
 func getDefOptions(advOpts ...defOption) DefOptions {
 	// set default options
 	opts := DefOptions{
 		OnGet: nil,
 		OnSet: nil,
+		Title: "",
 	}
 	for _, opt := range advOpts {
 		opt(&opts)
@@ -362,24 +370,11 @@ func NewAttributeDef(uuid string, value interface{}, options ...defOption) *Attr
 	}
 
 	schema := jsonschema.Reflect(value)
-	return &AttributeDef{
-		uuid:   uuid,
-		value:  value,
-		schema: schema,
-		onSet:  opts.OnSet,
-		onGet:  opts.OnGet,
-	}
-}
 
-// Creates an attribute definition with an inferred Json-Schema
-func NewAttributeDefWithTitle(uuid string, value interface{}, title string, options ...defOption) *AttributeDef {
-	opts := getDefOptions(options...)
-	if value == nil {
-		_defLog.WithFields(LF{"uuid": uuid}).Warn("no value provided, no json schema can be inferred, use NewAttributeDefWithSchema")
+	if opts.Title != "" {
+		schema.Title = opts.Title
 	}
 
-	schema := jsonschema.Reflect(value)
-	schema.Title = title
 	return &AttributeDef{
 		uuid:   uuid,
 		value:  value,
