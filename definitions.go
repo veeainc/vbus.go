@@ -13,6 +13,12 @@ import (
 
 var _defLog = getNamedLogger()
 
+const (
+	meshInclusive = "mesh:inclusive"
+	meshExclusive = "mesh:exclusive"
+	local         = "local"
+)
+
 type IDefinition interface {
 	// Search for a path in this definition.
 	// It can returns a IDefinition or none if not found.
@@ -26,6 +32,9 @@ type IDefinition interface {
 
 	// Get the Vbus representation.
 	ToRepr() JsonObj
+
+	// Get the node scope.
+	Scope() string
 }
 
 // Tells if a raw node is an attribute.
@@ -45,12 +54,15 @@ func IsNode(node interface{}) bool {
 
 type SetCallback = func(data interface{}, segment []string)
 type GetCallback = func(data interface{}, segment []string) interface{}
+type OwnershipCallback = func()
 
 // Advanced Nats methods options
 type DefOptions struct {
-	OnSet SetCallback
-	OnGet GetCallback
-	Title string
+	OnSet              SetCallback
+	OnGet              GetCallback
+	OnOwnershipChanged OwnershipCallback
+	Title              string
+	Scope              string
 }
 
 // Option is a function on the options for a connection.
@@ -74,16 +86,40 @@ func Title(title string) defOption {
 	}
 }
 
+func MeshInclusive() defOption {
+	return func(o *DefOptions) {
+		o.Scope = meshInclusive
+	}
+}
+
+func OnOwnershipChanged(c OwnershipCallback) defOption {
+	return func(o *DefOptions) {
+		o.OnOwnershipChanged = c
+	}
+}
+
+func MeshExclusive() defOption {
+	return func(o *DefOptions) {
+		o.Scope = meshExclusive
+	}
+}
+
 // Retrieve all options to a struct
 func getDefOptions(advOpts ...defOption) DefOptions {
 	// set default options
 	opts := DefOptions{
-		OnGet: nil,
-		OnSet: nil,
-		Title: "",
+		OnGet:              nil,
+		OnSet:              nil,
+		OnOwnershipChanged: nil,
+		Title:              "",
+		Scope:              "",
 	}
 	for _, opt := range advOpts {
 		opt(&opts)
+	}
+
+	if (opts.Scope == meshExclusive) && (opts.OnOwnershipChanged == nil) {
+		_defLog.Warning("mesh:exclusive node should have an OnOwnershipChanged cb")
 	}
 	return opts
 }
@@ -199,41 +235,31 @@ func isErrorDefinition(node interface{}) bool {
 // A Method definition.
 // It holds a user callback.
 type MethodDef struct { // implements IDefinition
-	method        MethodDefCallback
-	name          string
-	title         string
-	paramsSchema  JsonObj
-	returnsSchema JsonObj
+	method             MethodDefCallback
+	OnOwnershipChanged OwnershipCallback
+	name               string
+	title              string
+	scope              string
+	paramsSchema       JsonObj
+	returnsSchema      JsonObj
 }
 
 // Method callback
 type MethodDefCallback = interface{}
 
 // Creates a new method definition with auto json schema.
-func NewMethodDef(method MethodDefCallback) *MethodDef {
+func NewMethodDef(parent *Node, method MethodDefCallback, option ...defOption) *MethodDef {
+	opts := getDefOptions(option...)
+	scope := inheritScope(parent, opts.Scope)
+
 	md := &MethodDef{
-		method:        method,
-		name:          getFunctionName(method),
-		paramsSchema:  nil,
-		returnsSchema: nil,
-	}
-
-	err := md.inspectMethod()
-	if err != nil {
-		panic(errors.Wrap(err, "invalid method signature"))
-	}
-
-	return md
-}
-
-// Creates a new method definition with a title.
-func NewMethodDefWithTitle(method MethodDefCallback, title string) *MethodDef {
-	md := &MethodDef{
-		method:        method,
-		name:          getFunctionName(method),
-		title:         title,
-		paramsSchema:  nil,
-		returnsSchema: nil,
+		method:             method,
+		OnOwnershipChanged: opts.OnOwnershipChanged,
+		name:               getFunctionName(method),
+		paramsSchema:       nil,
+		returnsSchema:      nil,
+		scope:              scope,
+		title:              opts.Title,
 	}
 
 	err := md.inspectMethod()
@@ -245,12 +271,17 @@ func NewMethodDefWithTitle(method MethodDefCallback, title string) *MethodDef {
 }
 
 // Creates a new method def with the provided json schema.
-func NewMethodDefWithSchema(method MethodDefCallback, paramsSchema JsonObj, returnsSchema JsonObj) *MethodDef {
+func NewMethodDefWithSchema(parent *Node, method MethodDefCallback, paramsSchema JsonObj, returnsSchema JsonObj, option ...defOption) *MethodDef {
+	opts := getDefOptions(option...)
+	scope := inheritScope(parent, opts.Scope)
+
 	return &MethodDef{
 		method:        method,
 		name:          getFunctionName(method),
 		paramsSchema:  paramsSchema,
 		returnsSchema: returnsSchema,
+		scope:         scope,
+		title:         opts.Title,
 	}
 }
 
@@ -325,6 +356,10 @@ func (md *MethodDef) searchPath(parts []string) IDefinition {
 	return nil
 }
 
+func (md *MethodDef) Scope() string {
+	return md.scope
+}
+
 func (md *MethodDef) handleSet(args interface{}, parts []string) (interface{}, error) {
 	if isSlice(args) {
 		slice := args.([]interface{}) // to slice
@@ -355,15 +390,17 @@ func (md *MethodDef) ToRepr() JsonObj {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type AttributeDef struct { // implements IDefinition
-	uuid   string
-	value  interface{}
-	schema interface{}
-	onSet  SetCallback
-	onGet  GetCallback
+	uuid               string
+	value              interface{}
+	schema             interface{}
+	onSet              SetCallback
+	onGet              GetCallback
+	scope              string
+	OnOwnershipChanged OwnershipCallback
 }
 
 // Creates an attribute definition with an inferred Json-Schema
-func NewAttributeDef(uuid string, value interface{}, options ...defOption) *AttributeDef {
+func NewAttributeDef(parent *Node, uuid string, value interface{}, options ...defOption) *AttributeDef {
 	opts := getDefOptions(options...)
 	if value == nil {
 		_defLog.WithFields(LF{"uuid": uuid}).Warn("no value provided, no json schema can be inferred, use NewAttributeDefWithSchema")
@@ -375,25 +412,32 @@ func NewAttributeDef(uuid string, value interface{}, options ...defOption) *Attr
 		schema.Title = opts.Title
 	}
 
+	scope := inheritScope(parent, opts.Scope)
+
+	return &AttributeDef{
+		uuid:               uuid,
+		value:              value,
+		schema:             schema,
+		onSet:              opts.OnSet,
+		onGet:              opts.OnGet,
+		scope:              scope,
+		OnOwnershipChanged: opts.OnOwnershipChanged,
+	}
+}
+
+// Creates an attribute definition with a specific Json-Schema
+func NewAttributeDefWithSchema(parent *Node, uuid string, value interface{}, schema map[string]interface{},
+	options ...defOption) *AttributeDef {
+	opts := getDefOptions(options...)
+	scope := inheritScope(parent, opts.Scope)
 	return &AttributeDef{
 		uuid:   uuid,
 		value:  value,
 		schema: schema,
 		onSet:  opts.OnSet,
 		onGet:  opts.OnGet,
+		scope:  scope,
 	}
-}
-
-// Creates an attribute definition with a specific Json-Schema
-func NewAttributeDefWithSchema(uuid string, value interface{}, schema map[string]interface{},
-	options ...defOption) *AttributeDef {
-	opts := getDefOptions(options...)
-	return &AttributeDef{
-		uuid:   uuid,
-		value:  value,
-		schema: schema,
-		onSet:  opts.OnSet,
-		onGet:  opts.OnGet}
 }
 
 // Get uuid.
@@ -424,6 +468,10 @@ func (a *AttributeDef) searchPath(parts []string) IDefinition {
 		return a
 	}
 	return nil
+}
+
+func (a *AttributeDef) Scope() string {
+	return a.scope
 }
 
 func (a *AttributeDef) handleSet(data interface{}, parts []string) (interface{}, error) {
@@ -488,15 +536,30 @@ type NodeStruct = map[string]IDefinition
 // A node definition.
 // It holds a user structure (Python object) and optional callbacks.
 type NodeDef struct { // implements IDefinition
-	structure NodeStruct
-	onSet     SetCallback
+	structure          NodeStruct
+	onSet              SetCallback
+	onOwnershipChanged OwnershipCallback
+	scope              string
 }
 
-func NewNodeDef(rawNode RawNode, option ...defOption) *NodeDef {
+func inheritScope(parent *Node, scope string) string {
+	if scope != "" {
+		return scope
+	}
+	if parent == nil {
+		return local
+	}
+	return parent.definition.scope
+}
+
+func NewNodeDef(parent *Node, rawNode RawNode, option ...defOption) *NodeDef {
 	opts := getDefOptions(option...)
+	scope := inheritScope(parent, opts.Scope)
 	return &NodeDef{
-		structure: initializeStructure(rawNode),
-		onSet:     opts.OnSet,
+		structure:          initializeStructure(rawNode),
+		onSet:              opts.OnSet,
+		scope:              scope,
+		onOwnershipChanged: opts.OnOwnershipChanged,
 	}
 }
 
@@ -507,6 +570,10 @@ func (nd *NodeDef) searchPath(parts []string) IDefinition {
 		return v.searchPath(parts[1:])
 	}
 	return nil
+}
+
+func (nd *NodeDef) Scope() string {
+	return nd.scope
 }
 
 func (nd *NodeDef) handleSet(data interface{}, parts []string) (interface{}, error) {

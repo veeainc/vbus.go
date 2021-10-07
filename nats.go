@@ -23,6 +23,7 @@ const (
 	envVbusPath   = "VBUS_PATH"
 	envVbusUrl    = "VBUS_URL"
 	anonymousUser = "anonymous"
+	meshScope     = "mesh"
 	defaultCost   = 11
 )
 
@@ -264,6 +265,7 @@ type advOptions struct {
 	Timeout  time.Duration
 	WithId   bool
 	WithHost bool
+	WithMesh bool
 }
 
 // Option is a function on the options for a connection.
@@ -290,6 +292,15 @@ func WithoutHost() AdvOption {
 	}
 }
 
+// Include Mesh scope option to path
+func WithMesh() AdvOption {
+	return func(o *advOptions) {
+		o.WithMesh = true
+		// "mesh" exclusive with "host" (local) path
+		o.WithHost = false
+	}
+}
+
 // Retrieve all options to a struct
 func getAdvOptions(advOpts ...AdvOption) advOptions {
 	// set default options
@@ -297,6 +308,7 @@ func getAdvOptions(advOpts ...AdvOption) advOptions {
 		Timeout:  1000 * time.Millisecond,
 		WithHost: true,
 		WithId:   true,
+		WithMesh: false,
 	}
 	for _, opt := range advOpts {
 		opt(&opts)
@@ -313,7 +325,23 @@ func (c *ExtendedNatsClient) getPath(base string, opts advOptions) (path string)
 	if opts.WithId {
 		path = joinPath(c.id, path)
 	}
+	if opts.WithMesh {
+		path = joinPath(meshScope, path)
+	}
+
 	return
+}
+
+// Replace hostname by mesh for mesh publish
+func (c *ExtendedNatsClient) generateMeshPath(path string) string {
+	return strings.Replace(path, c.hostname, meshScope, 1)
+}
+
+func (c *ExtendedNatsClient) duplicateToMesh(scope string) bool {
+	if (scope == meshInclusive) || (scope == meshExclusive) {
+		return true
+	}
+	return false
 }
 
 func (c *ExtendedNatsClient) Request(base string, data interface{}, advOpts ...AdvOption) (interface{}, error) {
@@ -326,10 +354,61 @@ func (c *ExtendedNatsClient) Request(base string, data interface{}, advOpts ...A
 	return fromVbus(msg.Data)
 }
 
-func (c *ExtendedNatsClient) Publish(base string, data interface{}, advOpts ...AdvOption) error {
+func (c *ExtendedNatsClient) RequestMulti(base string, data interface{}, advOpts ...AdvOption) (JsonObj, error) {
+	var resp JsonObj
+
 	opts := getAdvOptions(advOpts...)
 	natsPath := c.getPath(base, opts)
-	return c.client.Publish(natsPath, toVbus(data))
+
+	inbox := c.client.NewRespInbox()
+
+	sub, err := c.client.Subscribe(inbox, func(msg *nats.Msg) {
+		data, err := fromVbus(msg.Data)
+		if err != nil {
+			_nodesLog.WithFields(LF{"path": msg.Subject}).Warn("received invalid node")
+			return // skip
+		}
+
+		o, ok := data.(JsonObj)
+		if !ok {
+			_nodesLog.Warn("received data is not a json object")
+			return // skip
+		}
+
+		resp = mergeJsonObjs(resp, o)
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot subscribe to inbox")
+	}
+
+	err = c.client.PublishRequest(natsPath, inbox, toVbus(data))
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot publish")
+	}
+
+	timer := time.NewTimer(opts.Timeout)
+	<-timer.C
+
+	_ = sub.Unsubscribe()
+	_ = sub.Drain()
+
+	return JsonObj, nil
+}
+
+func (c *ExtendedNatsClient) Publish(base string, data interface{}, scope string, advOpts ...AdvOption) error {
+	opts := getAdvOptions(advOpts...)
+	natsPath := c.getPath(base, opts)
+
+	err := c.client.Publish(natsPath, toVbus(data))
+	if err != nil {
+		return err
+	}
+
+	if c.duplicateToMesh(scope) {
+		err = c.client.Publish(c.generateMeshPath(natsPath), toVbus(data))
+	}
+
+	return err
 }
 
 // Utility method that automatically parse subject wildcard and chevron to arguments.

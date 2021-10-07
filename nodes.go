@@ -73,6 +73,22 @@ type Node struct { // implements Element
 	definition *NodeDef
 }
 
+// Check remote node ownership
+func (n *Node) checkNodeOwnership(node *Node) {
+	// if scope is mesh:exclusive, reduce scope
+	if node.definition.scope == meshExclusive {
+		result, err := n.client.Request(joinPath(node.GetPath(), notifGet), nil, WithMesh())
+		if err == nil {
+			_, ok := result.(JsonObj)
+			if ok == true {
+				_nodesLog.Warn(node.GetPath() + " already exist -> reduce scope to local")
+				node.definition.scope = local
+			}
+		}
+
+	}
+}
+
 // Creates a Node.
 func NewNode(nats *ExtendedNatsClient, uuid string, definition *NodeDef, parent IElement) *Node {
 	return &Node{
@@ -94,27 +110,19 @@ func (n *Node) Definition() *NodeDef {
 // Add a child node and notify Vbus
 // Returns: a new node
 func (n *Node) AddNode(uuid string, rawNode RawNode, options ...defOption) (*Node, error) {
-	def := NewNodeDef(rawNode, options...)  // create the definition
-	node := NewNode(n.client, uuid, def, n) // create the connected node
-	n.definition.AddChild(uuid, def)        // add it
-
-	// send the node definition on Vbus
-	packet := JsonObj{uuid: def.ToRepr()}
-	err := n.client.Publish(joinPath(n.GetPath(), notifAdded), packet)
-	if err != nil {
-		return node, errors.Wrap(err, "cannot publish new node")
-	}
-
-	return node, nil
+	node := n.CreateNode(uuid, rawNode, options...)
+	err := n.PublishNode((node))
+	return node, err
 }
 
 // Create a child node in Vbus
 // but do not publish the node
 // Returns: a new node
 func (n *Node) CreateNode(uuid string, rawNode RawNode, options ...defOption) *Node {
-	def := NewNodeDef(rawNode, options...)  // create the definition
-	node := NewNode(n.client, uuid, def, n) // create the connected node
-	n.definition.AddChild(uuid, def)        // add it
+	def := NewNodeDef(n, rawNode, options...) // create the definition
+	node := NewNode(n.client, uuid, def, n)   // create the connected node
+	n.definition.AddChild(uuid, def)          // add it
+	n.checkNodeOwnership(node)
 
 	return node
 }
@@ -124,36 +132,44 @@ func (n *Node) CreateNode(uuid string, rawNode RawNode, options ...defOption) *N
 func (n *Node) PublishNode(node *Node) error {
 	// send the node definition on Vbus
 	packet := JsonObj{node.uuid: node.getDefinition().ToRepr()}
-	err := n.client.Publish(joinPath(n.GetPath(), notifAdded), packet)
+	err := n.client.Publish(joinPath(n.GetPath(), notifAdded), packet, node.definition.scope)
 	if err != nil {
 		return errors.Wrap(err, "cannot publish new node")
 	}
 	return nil
 }
 
+// Check remote attribute ownership
+func (n *Node) checkAttributeOwnership(node *Attribute) {
+	// if scope is mesh:exclusive, reduce scope
+	if node.definition.scope == meshExclusive {
+		result, err := n.client.Request(joinPath(node.GetPath(), notifGet), nil, WithMesh())
+		if err == nil {
+			_, ok := result.(JsonObj)
+			if ok == true {
+				_nodesLog.Warn(node.GetPath() + " already exist -> reduce scope to local")
+				node.definition.scope = local
+			}
+		}
+
+	}
+}
+
 // Add a child attribute and notify Vbus
 func (n *Node) AddAttribute(uuid string, value interface{}, options ...defOption) (*Attribute, error) {
-	def := NewAttributeDef(uuid, value, options...) // create the definition
-	node := NewAttribute(n.client, uuid, def, n)    // create the connected node
-	n.definition.AddChild(uuid, def)                // add it
-
-	// send the node definition on Vbus
-	packet := JsonObj{uuid: def.ToRepr()}
-	err := n.client.Publish(joinPath(n.GetPath(), notifAdded), packet)
-	if err != nil {
-		return node, errors.Wrap(err, "cannot publish new attribute")
-	}
-
-	return node, nil
+	node := n.CreateAttribute(uuid, value, options...)
+	err := n.PublishAttribute(node)
+	return node, err
 }
 
 // Create a child attribute in Vbus
 // but do not publish the attribute
 // returns: attribute
 func (n *Node) CreateAttribute(uuid string, value interface{}, options ...defOption) *Attribute {
-	def := NewAttributeDef(uuid, value, options...) // create the definition
-	node := NewAttribute(n.client, uuid, def, n)    // create the connected node
-	n.definition.AddChild(uuid, def)                // add it
+	def := NewAttributeDef(n, uuid, value, options...) // create the definition
+	node := NewAttribute(n.client, uuid, def, n)       // create the connected node
+	n.definition.AddChild(uuid, def)                   // add it
+	n.checkAttributeOwnership(node)
 	return node
 }
 
@@ -161,9 +177,9 @@ func (n *Node) CreateAttribute(uuid string, value interface{}, options ...defOpt
 // but do not publish the attribute
 // returns: attribute
 func (n *Node) CreateAttributeWithSchema(uuid string, value interface{}, schema map[string]interface{}, options ...defOption) *Attribute {
-	def := NewAttributeDefWithSchema(uuid, value, schema, options...) // create the definition
-	node := NewAttribute(n.client, uuid, def, n)                      // create the connected node
-	n.definition.AddChild(uuid, def)                                  // add it
+	def := NewAttributeDefWithSchema(n, uuid, value, schema, options...) // create the definition
+	node := NewAttribute(n.client, uuid, def, n)                         // create the connected node
+	n.definition.AddChild(uuid, def)                                     // add it
 	return node
 }
 
@@ -172,62 +188,59 @@ func (n *Node) CreateAttributeWithSchema(uuid string, value interface{}, schema 
 func (n *Node) PublishAttribute(node *Attribute) error {
 	// send the node definition on Vbus
 	packet := JsonObj{node.uuid: node.getDefinition().ToRepr()}
-	err := n.client.Publish(joinPath(n.GetPath(), notifAdded), packet)
+	err := n.client.Publish(joinPath(n.GetPath(), notifAdded), packet, node.definition.scope)
 	if err != nil {
 		return errors.Wrap(err, "cannot publish new attribute")
 	}
 	return nil
 }
 
+// Check remote method ownership
+func (n *Node) checkMethodOwnership(node *Method) {
+	// if scope is mesh:exclusive, reduce scope
+	if node.definition.scope == meshExclusive {
+		result, err := n.client.Request(joinPath(node.GetPath(), notifGet), nil, WithMesh())
+		if err == nil {
+			_, ok := result.(JsonObj)
+			if ok == true {
+				_nodesLog.Warn(node.GetPath() + " already exist -> reduce scope to local")
+				node.definition.scope = local
+			}
+		}
+
+	}
+}
+
 // Add a child method node and notify Vbus
 // The method must be a func(args..., path []string)
 // The last argument is mandatory, it will receive the splited Nats path.
-func (n *Node) AddMethod(uuid string, method MethodDefCallback) (*Method, error) {
-	def := NewMethodDef(method)               // create the definition
-	node := NewMethod(n.client, uuid, def, n) // create the connected node
-	n.definition.AddChild(uuid, def)          // add it
-
-	// send the node definition on Vbus
-	packet := JsonObj{uuid: def.ToRepr()}
-	err := n.client.Publish(joinPath(n.GetPath(), notifAdded), packet)
-	if err != nil {
-		return node, errors.Wrap(err, "cannot publish new method")
-	}
-
-	return node, nil
+func (n *Node) AddMethod(uuid string, method MethodDefCallback, options ...defOption) (*Method, error) {
+	node := n.CreateMethod(uuid, method, options...)
+	err := n.PublishMethod(node)
+	return node, err
 }
 
 // Create a child method node but do not publish on Vbus
 // The method must be a func(args..., path []string)
 // The last argument is mandatory, it will receive the split Nats path.
-func (n *Node) CreateMethod(uuid string, method MethodDefCallback) *Method {
+func (n *Node) CreateMethod(uuid string, method MethodDefCallback, options ...defOption) *Method {
 	// send the node definition on Vbus
-	def := NewMethodDef(method)               // create the definition
-	node := NewMethod(n.client, uuid, def, n) // create the connected node
-	n.definition.AddChild(uuid, def)          // add it
-
-	return node
-}
-
-// Create a child method node with a specific title but do not publish on Vbus
-func (n *Node) CreateMethodWithTitle(uuid string, title string, method MethodDefCallback) *Method {
-	// send the node definition on Vbus
-	def := NewMethodDefWithTitle(method, title) // create the definition
-	node := NewMethod(n.client, uuid, def, n)   // create the connected node
-	n.definition.AddChild(uuid, def)            // add it
-
+	def := NewMethodDef(n, method, options...) // create the definition
+	node := NewMethod(n.client, uuid, def, n)  // create the connected node
+	n.definition.AddChild(uuid, def)           // add it
+	n.checkMethodOwnership(node)
 	return node
 }
 
 // Create a child method in Vbus with json schema
 // but do not publish the method
 // returns: method
-func (n *Node) CreateMethodWithSchema(uuid string, paramsSchema map[string]interface{}, returnsSchema map[string]interface{}, method MethodDefCallback) *Method {
+func (n *Node) CreateMethodWithSchema(uuid string, paramsSchema map[string]interface{}, returnsSchema map[string]interface{}, method MethodDefCallback, options ...defOption) *Method {
 	// send the node definition on Vbus
-	def := NewMethodDefWithSchema(method, paramsSchema, returnsSchema) // create the definition
-	node := NewMethod(n.client, uuid, def, n)                          // create the connected node
-	n.definition.AddChild(uuid, def)                                   // add it
-
+	def := NewMethodDefWithSchema(n, method, paramsSchema, returnsSchema, options...) // create the definition
+	node := NewMethod(n.client, uuid, def, n)                                         // create the connected node
+	n.definition.AddChild(uuid, def)                                                  // add it
+	n.checkMethodOwnership(node)
 	return node
 }
 
@@ -236,7 +249,7 @@ func (n *Node) CreateMethodWithSchema(uuid string, paramsSchema map[string]inter
 func (n *Node) PublishMethod(node *Method) error {
 	// send the node definition on Vbus
 	packet := JsonObj{node.uuid: node.getDefinition().ToRepr()}
-	err := n.client.Publish(joinPath(n.GetPath(), notifAdded), packet)
+	err := n.client.Publish(joinPath(n.GetPath(), notifAdded), packet, node.definition.scope)
 	if err != nil {
 		return errors.Wrap(err, "cannot publish new method")
 	}
@@ -244,9 +257,8 @@ func (n *Node) PublishMethod(node *Method) error {
 }
 
 // Call the  method with some arguments.
-func (m *Method) Call(args ...interface{}) (interface{}, error) {
-	return handleVbusErrorIfAny(
-		m.client.Request(joinPath(m.GetPath(), notifSetted), args))
+func (m *Method) Call(args ...interface{}) error {
+	return m.client.Publish(joinPath(m.GetPath(), notifSetted), args, m.definition.scope)
 }
 
 func (n *Node) GetAttribute(parts ...string) (*Attribute, error) {
@@ -272,7 +284,7 @@ func (n *Node) RemoveElement(uuid string) error {
 
 	// send the node definition on Vbus
 	packet := JsonObj{uuid: def.ToRepr()}
-	if err := n.client.Publish(joinPath(n.GetPath(), notifRemoved), packet); err != nil {
+	if err := n.client.Publish(joinPath(n.GetPath(), notifRemoved), packet, def.Scope()); err != nil {
 		return errors.Wrap(err, "element deleted but cannot send vbus notification")
 	}
 	return nil // success
@@ -315,7 +327,7 @@ func (a *Attribute) GetValue() interface{} {
 // Set attribute value.
 func (a *Attribute) SetValue(value interface{}) error {
 	a.definition.value = value
-	return a.client.Publish(joinPath(a.GetPath(), notifValueSetted), value)
+	return a.client.Publish(joinPath(a.GetPath(), notifValueSetted), value, a.definition.scope)
 }
 
 // Add option to an existing attribute
@@ -376,7 +388,7 @@ type ModuleInfo struct {
 // Creates a new NodeManager. Don't forget to defer Close()
 func NewNodeManager(nats *ExtendedNatsClient, opts natsClientOptions) *NodeManager {
 	return &NodeManager{
-		Node:     NewNode(nats, "", NewNodeDef(RawNode{}), nil),
+		Node:     NewNode(nats, "", NewNodeDef(nil, RawNode{}), nil),
 		opts:     opts,
 		urisNode: nil,
 	}
@@ -482,7 +494,24 @@ func (nm *NodeManager) Initialize() error {
 	}
 	nm.subs = append(nm.subs, sub) // save sub
 
-	// Subscribe to all
+	// Subscribe to all "mesh"
+	sub, err = nm.client.Subscribe(">", func(data interface{}, segments []string) interface{} {
+		// Get a specific path
+		parts := strings.Split(segments[0], ".")               // split the first segment (">") to string list.
+		parts = filter.Choose(parts, isStrNotEmpty).([]string) // filter empty strings
+		if len(parts) < 1 {
+			return nil // invalid path, missing event ("add", "del"...)
+		}
+
+		event, parts := parts[len(parts)-1], parts[:len(parts)-1] // pop event from parts
+		return nm.handleEvent(data, event, parts...)
+	}, WithMesh())
+	if err != nil {
+		return errors.Wrap(err, "cannot subscribe to all")
+	}
+	nm.subs = append(nm.subs, sub) // save sub
+
+	// Subscribe to all "local"
 	sub, err = nm.client.Subscribe(">", func(data interface{}, segments []string) interface{} {
 		// Get a specific path
 		parts := strings.Split(segments[0], ".")               // split the first segment (">") to string list.
