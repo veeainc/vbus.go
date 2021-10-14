@@ -400,6 +400,11 @@ func isWildcardPath(parts ...string) bool {
 	return stringInSlice("*", parts)
 }
 
+// Test if its a Mesh  path.
+func isMeshPath(parts ...string) bool {
+	return (parts[2] == "mesh")
+}
+
 // Prepend a string on a slice.
 func prepend(s string, ss []string) []string {
 	return append([]string{s}, ss...)

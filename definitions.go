@@ -30,6 +30,9 @@ type IDefinition interface {
 	// Tells how to handle a set request from Vbus.
 	handleGet(data interface{}, parts []string) (interface{}, error)
 
+	// Tells how to handle a ownership request from Vbus.
+	handleOwnership(data interface{}, parts []string, hostname string) (interface{}, error)
+
 	// Get the Vbus representation.
 	ToRepr() JsonObj
 
@@ -54,7 +57,7 @@ func IsNode(node interface{}) bool {
 
 type SetCallback = func(data interface{}, segment []string)
 type GetCallback = func(data interface{}, segment []string) interface{}
-type OwnershipCallback = func()
+type OwnershipCallback = func(data interface{}, segment []string)
 
 // Advanced Nats methods options
 type DefOptions struct {
@@ -63,6 +66,7 @@ type DefOptions struct {
 	OnOwnershipChanged OwnershipCallback
 	Title              string
 	Scope              string
+	ForceOwnership     bool
 }
 
 // Option is a function on the options for a connection.
@@ -104,6 +108,12 @@ func MeshExclusive() defOption {
 	}
 }
 
+func ForceOwnership() defOption {
+	return func(o *DefOptions) {
+		o.ForceOwnership = true
+	}
+}
+
 // Retrieve all options to a struct
 func getDefOptions(advOpts ...defOption) DefOptions {
 	// set default options
@@ -113,6 +123,7 @@ func getDefOptions(advOpts ...defOption) DefOptions {
 		OnOwnershipChanged: nil,
 		Title:              "",
 		Scope:              "",
+		ForceOwnership:     false,
 	}
 	for _, opt := range advOpts {
 		opt(&opts)
@@ -183,7 +194,16 @@ func (e *ErrorDefinition) searchPath(parts []string) IDefinition {
 	return nil
 }
 
+func (e *ErrorDefinition) Scope() string {
+	return local
+}
+
 func (e *ErrorDefinition) handleSet(data interface{}, parts []string) (interface{}, error) {
+	_defLog.Trace("not implemented")
+	return nil, nil
+}
+
+func (e *ErrorDefinition) handleOwnership(data interface{}, parts []string, hostname string) (interface{}, error) {
 	_defLog.Trace("not implemented")
 	return nil, nil
 }
@@ -236,7 +256,7 @@ func isErrorDefinition(node interface{}) bool {
 // It holds a user callback.
 type MethodDef struct { // implements IDefinition
 	method             MethodDefCallback
-	OnOwnershipChanged OwnershipCallback
+	onOwnershipChanged OwnershipCallback
 	name               string
 	title              string
 	scope              string
@@ -254,7 +274,7 @@ func NewMethodDef(parent *Node, method MethodDefCallback, option ...defOption) *
 
 	md := &MethodDef{
 		method:             method,
-		OnOwnershipChanged: opts.OnOwnershipChanged,
+		onOwnershipChanged: opts.OnOwnershipChanged,
 		name:               getFunctionName(method),
 		paramsSchema:       nil,
 		returnsSchema:      nil,
@@ -360,6 +380,23 @@ func (md *MethodDef) Scope() string {
 	return md.scope
 }
 
+func (md *MethodDef) handleOwnership(args interface{}, parts []string, hostname string) (interface{}, error) {
+
+	if args != nil {
+		if args.(string) != hostname {
+			return nil, nil
+		}
+		md.scope = local
+		_defLog.WithFields(LF{"node": parts}).Debug("set ownership to local")
+	}
+	if md.onOwnershipChanged != nil {
+		return invokeFunc(md.onOwnershipChanged, args, parts)
+	} else {
+		_defLog.WithFields(LF{"method": md.name}).Debug("no ownership changed cb")
+	}
+	return nil, nil
+}
+
 func (md *MethodDef) handleSet(args interface{}, parts []string) (interface{}, error) {
 	if isSlice(args) {
 		slice := args.([]interface{}) // to slice
@@ -396,7 +433,7 @@ type AttributeDef struct { // implements IDefinition
 	onSet              SetCallback
 	onGet              GetCallback
 	scope              string
-	OnOwnershipChanged OwnershipCallback
+	onOwnershipChanged OwnershipCallback
 }
 
 // Creates an attribute definition with an inferred Json-Schema
@@ -421,7 +458,7 @@ func NewAttributeDef(parent *Node, uuid string, value interface{}, options ...de
 		onSet:              opts.OnSet,
 		onGet:              opts.OnGet,
 		scope:              scope,
-		OnOwnershipChanged: opts.OnOwnershipChanged,
+		onOwnershipChanged: opts.OnOwnershipChanged,
 	}
 }
 
@@ -431,12 +468,13 @@ func NewAttributeDefWithSchema(parent *Node, uuid string, value interface{}, sch
 	opts := getDefOptions(options...)
 	scope := inheritScope(parent, opts.Scope)
 	return &AttributeDef{
-		uuid:   uuid,
-		value:  value,
-		schema: schema,
-		onSet:  opts.OnSet,
-		onGet:  opts.OnGet,
-		scope:  scope,
+		uuid:               uuid,
+		value:              value,
+		schema:             schema,
+		onSet:              opts.OnSet,
+		onGet:              opts.OnGet,
+		scope:              scope,
+		onOwnershipChanged: opts.OnOwnershipChanged,
 	}
 }
 
@@ -472,6 +510,23 @@ func (a *AttributeDef) searchPath(parts []string) IDefinition {
 
 func (a *AttributeDef) Scope() string {
 	return a.scope
+}
+
+func (a *AttributeDef) handleOwnership(args interface{}, parts []string, hostname string) (interface{}, error) {
+
+	if args != nil {
+		if args.(string) != hostname {
+			return nil, nil
+		}
+		a.scope = local
+		_defLog.WithFields(LF{"node": parts}).Debug("set ownership to local")
+	}
+	if a.onOwnershipChanged != nil {
+		return invokeFunc(a.onOwnershipChanged, args, parts)
+	} else {
+		_defLog.WithFields(LF{"attribute": a.uuid}).Debug("no ownership changed cb")
+	}
+	return nil, nil
 }
 
 func (a *AttributeDef) handleSet(data interface{}, parts []string) (interface{}, error) {
@@ -576,6 +631,23 @@ func (nd *NodeDef) Scope() string {
 	return nd.scope
 }
 
+func (nd *NodeDef) handleOwnership(args interface{}, parts []string, hostname string) (interface{}, error) {
+
+	if args != nil {
+		if args.(string) != hostname {
+			return nil, nil
+		}
+		nd.scope = local
+		_defLog.WithFields(LF{"node": parts}).Debug("set ownership to local")
+	}
+	if nd.onOwnershipChanged != nil {
+		return invokeFunc(nd.onOwnershipChanged, args, parts)
+	} else {
+		_defLog.WithFields(LF{"attribute": parts}).Debug("no ownership changed cb")
+	}
+	return nil, nil
+}
+
 func (nd *NodeDef) handleSet(data interface{}, parts []string) (interface{}, error) {
 	if nd.onSet != nil {
 		return invokeFunc(nd.onSet, data, parts)
@@ -602,11 +674,11 @@ func initializeStructure(rawNode RawNode) NodeStruct {
 
 	for k, v := range rawNode {
 		if isMap(v) { // if its a map
-			structure[k] = NewNodeDef(v.(RawNode))
+			structure[k] = NewNodeDef(nil, v.(RawNode))
 		} else if d, ok := v.(IDefinition); ok { // if its already a definition
 			structure[k] = d
 		} else {
-			structure[k] = NewAttributeDef(k, v)
+			structure[k] = NewAttributeDef(nil, k, v)
 		}
 	}
 	return structure

@@ -24,10 +24,15 @@ const (
 	notifValueGet    = "value.get"
 	notifSetted      = "set"
 	notifValueSetted = "value.set"
+	notifOwnership   = "own"
 	exposeNodeUuid   = "uris"
 )
 
 var _nodesLog = getNamedLogger()
+
+var (
+	ErrOwnership = errors.New("MeshExclusive Ownership already taken")
+)
 
 // A Vbus connected element that send updates.
 type IElement interface {
@@ -74,19 +79,29 @@ type Node struct { // implements Element
 }
 
 // Check remote node ownership
-func (n *Node) checkNodeOwnership(node *Node) {
+func (n *Node) checkNodeOwnership(node *Node, options ...defOption) error {
+	opts := getDefOptions(options...)
 	// if scope is mesh:exclusive, reduce scope
 	if node.definition.scope == meshExclusive {
 		result, err := n.client.Request(joinPath(node.GetPath(), notifGet), nil, WithMesh())
 		if err == nil {
 			_, ok := result.(JsonObj)
 			if ok == true {
-				_nodesLog.Warn(node.GetPath() + " already exist -> reduce scope to local")
-				node.definition.scope = local
+				if opts.ForceOwnership == false {
+					_nodesLog.Warn(node.GetPath() + " already exist -> reduce scope to local")
+					node.definition.scope = local
+					return ErrOwnership
+				}
+				_nodesLog.Warn(node.GetPath() + " already exist -> force ownership")
+				return node.TakeOwnership()
 			}
 		}
-
 	}
+	return nil
+}
+
+func (n *Node) TakeOwnership() error {
+	return n.client.Publish(joinPath(n.GetPath(), notifOwnership), n.client.hostname, n.definition.scope, WithMesh())
 }
 
 // Creates a Node.
@@ -110,21 +125,22 @@ func (n *Node) Definition() *NodeDef {
 // Add a child node and notify Vbus
 // Returns: a new node
 func (n *Node) AddNode(uuid string, rawNode RawNode, options ...defOption) (*Node, error) {
-	node := n.CreateNode(uuid, rawNode, options...)
-	err := n.PublishNode((node))
+	node, err := n.CreateNode(uuid, rawNode, options...)
+	if err == nil {
+		err = n.PublishNode((node))
+	}
 	return node, err
 }
 
 // Create a child node in Vbus
 // but do not publish the node
 // Returns: a new node
-func (n *Node) CreateNode(uuid string, rawNode RawNode, options ...defOption) *Node {
+func (n *Node) CreateNode(uuid string, rawNode RawNode, options ...defOption) (*Node, error) {
 	def := NewNodeDef(n, rawNode, options...) // create the definition
 	node := NewNode(n.client, uuid, def, n)   // create the connected node
-	n.definition.AddChild(uuid, def)          // add it
-	n.checkNodeOwnership(node)
-
-	return node
+	err := n.checkNodeOwnership(node, options...)
+	n.definition.AddChild(uuid, def) // add it
+	return node, err
 }
 
 // Publish the node previously created with CreateNode
@@ -140,47 +156,60 @@ func (n *Node) PublishNode(node *Node) error {
 }
 
 // Check remote attribute ownership
-func (n *Node) checkAttributeOwnership(node *Attribute) {
+func (n *Node) checkAttributeOwnership(node *Attribute, options ...defOption) error {
+	opts := getDefOptions(options...)
 	// if scope is mesh:exclusive, reduce scope
 	if node.definition.scope == meshExclusive {
 		result, err := n.client.Request(joinPath(node.GetPath(), notifGet), nil, WithMesh())
 		if err == nil {
 			_, ok := result.(JsonObj)
 			if ok == true {
-				_nodesLog.Warn(node.GetPath() + " already exist -> reduce scope to local")
-				node.definition.scope = local
+				if opts.ForceOwnership == false {
+					_nodesLog.Warn(node.GetPath() + " already exist -> reduce scope to local")
+					node.definition.scope = local
+					return ErrOwnership
+				}
+				_nodesLog.Warn(node.GetPath() + " already exist -> force ownership")
+				return node.TakeOwnership()
 			}
 		}
-
 	}
+	return nil
+}
+
+func (a *Attribute) TakeOwnership() error {
+	return a.client.Publish(joinPath(a.GetPath(), notifOwnership), a.client.hostname, a.definition.scope, WithMesh())
 }
 
 // Add a child attribute and notify Vbus
 func (n *Node) AddAttribute(uuid string, value interface{}, options ...defOption) (*Attribute, error) {
-	node := n.CreateAttribute(uuid, value, options...)
-	err := n.PublishAttribute(node)
+	node, err := n.CreateAttribute(uuid, value, options...)
+	if err == nil {
+		err = n.PublishAttribute(node)
+	}
 	return node, err
 }
 
 // Create a child attribute in Vbus
 // but do not publish the attribute
 // returns: attribute
-func (n *Node) CreateAttribute(uuid string, value interface{}, options ...defOption) *Attribute {
+func (n *Node) CreateAttribute(uuid string, value interface{}, options ...defOption) (*Attribute, error) {
 	def := NewAttributeDef(n, uuid, value, options...) // create the definition
 	node := NewAttribute(n.client, uuid, def, n)       // create the connected node
-	n.definition.AddChild(uuid, def)                   // add it
-	n.checkAttributeOwnership(node)
-	return node
+	err := n.checkAttributeOwnership(node)
+	n.definition.AddChild(uuid, def) // add it
+	return node, err
 }
 
 // Create a child attribute in Vbus with json schema
 // but do not publish the attribute
 // returns: attribute
-func (n *Node) CreateAttributeWithSchema(uuid string, value interface{}, schema map[string]interface{}, options ...defOption) *Attribute {
+func (n *Node) CreateAttributeWithSchema(uuid string, value interface{}, schema map[string]interface{}, options ...defOption) (*Attribute, error) {
 	def := NewAttributeDefWithSchema(n, uuid, value, schema, options...) // create the definition
 	node := NewAttribute(n.client, uuid, def, n)                         // create the connected node
-	n.definition.AddChild(uuid, def)                                     // add it
-	return node
+	err := n.checkAttributeOwnership(node)
+	n.definition.AddChild(uuid, def) // add it
+	return node, err
 }
 
 // Publish the attribute previously created with CreateAttribute
@@ -196,52 +225,64 @@ func (n *Node) PublishAttribute(node *Attribute) error {
 }
 
 // Check remote method ownership
-func (n *Node) checkMethodOwnership(node *Method) {
+func (n *Node) checkMethodOwnership(node *Method, options ...defOption) error {
+	opts := getDefOptions(options...)
 	// if scope is mesh:exclusive, reduce scope
 	if node.definition.scope == meshExclusive {
 		result, err := n.client.Request(joinPath(node.GetPath(), notifGet), nil, WithMesh())
 		if err == nil {
 			_, ok := result.(JsonObj)
 			if ok == true {
-				_nodesLog.Warn(node.GetPath() + " already exist -> reduce scope to local")
-				node.definition.scope = local
+				if opts.ForceOwnership == false {
+					_nodesLog.Warn(node.GetPath() + " already exist -> reduce scope to local")
+					node.definition.scope = local
+					return ErrOwnership
+				}
+				_nodesLog.Warn(node.GetPath() + " already exist -> force ownership")
+				return node.TakeOwnership()
 			}
 		}
-
 	}
+	return nil
+}
+
+func (m *Method) TakeOwnership() error {
+	return m.client.Publish(joinPath(m.GetPath(), notifOwnership), m.client.hostname, m.definition.scope, WithMesh())
 }
 
 // Add a child method node and notify Vbus
 // The method must be a func(args..., path []string)
 // The last argument is mandatory, it will receive the splited Nats path.
 func (n *Node) AddMethod(uuid string, method MethodDefCallback, options ...defOption) (*Method, error) {
-	node := n.CreateMethod(uuid, method, options...)
-	err := n.PublishMethod(node)
+	node, err := n.CreateMethod(uuid, method, options...)
+	if err == nil {
+		err = n.PublishMethod(node)
+	}
 	return node, err
 }
 
 // Create a child method node but do not publish on Vbus
 // The method must be a func(args..., path []string)
 // The last argument is mandatory, it will receive the split Nats path.
-func (n *Node) CreateMethod(uuid string, method MethodDefCallback, options ...defOption) *Method {
+func (n *Node) CreateMethod(uuid string, method MethodDefCallback, options ...defOption) (*Method, error) {
 	// send the node definition on Vbus
 	def := NewMethodDef(n, method, options...) // create the definition
 	node := NewMethod(n.client, uuid, def, n)  // create the connected node
-	n.definition.AddChild(uuid, def)           // add it
-	n.checkMethodOwnership(node)
-	return node
+	err := n.checkMethodOwnership(node)
+	n.definition.AddChild(uuid, def) // add it
+	return node, err
 }
 
 // Create a child method in Vbus with json schema
 // but do not publish the method
 // returns: method
-func (n *Node) CreateMethodWithSchema(uuid string, paramsSchema map[string]interface{}, returnsSchema map[string]interface{}, method MethodDefCallback, options ...defOption) *Method {
+func (n *Node) CreateMethodWithSchema(uuid string, paramsSchema map[string]interface{}, returnsSchema map[string]interface{}, method MethodDefCallback, options ...defOption) (*Method, error) {
 	// send the node definition on Vbus
 	def := NewMethodDefWithSchema(n, method, paramsSchema, returnsSchema, options...) // create the definition
 	node := NewMethod(n.client, uuid, def, n)                                         // create the connected node
-	n.definition.AddChild(uuid, def)                                                  // add it
-	n.checkMethodOwnership(node)
-	return node
+	err := n.checkMethodOwnership(node)
+	n.definition.AddChild(uuid, def) // add it
+	return node, err
 }
 
 // Publish the method previously created with CreateMethod
@@ -504,6 +545,9 @@ func (nm *NodeManager) Initialize() error {
 		}
 
 		event, parts := parts[len(parts)-1], parts[:len(parts)-1] // pop event from parts
+		if nm.handleMesh(parts...) == false {
+			return nil // element not mesh visibility
+		}
 		return nm.handleEvent(data, event, parts...)
 	}, WithMesh())
 	if err != nil {
@@ -575,6 +619,8 @@ func (nm *NodeManager) handleEvent(data interface{}, event string, segments ...s
 			ret, err = nodeDef.handleGet(data, segments)
 		case notifSetted:
 			ret, err = nodeDef.handleSet(data, segments)
+		case notifOwnership:
+			ret, err = nodeDef.handleOwnership(data, segments, nm.client.hostname)
 		default:
 			return nil
 		}
@@ -597,6 +643,16 @@ func (nm *NodeManager) handleEvent(data interface{}, event string, segments ...s
 		_nodesLog.WithFields(LF{"path": joinPath(segments...)}).Warn("path not found")
 		return NewPathNotFoundErrorWithDetail(joinPath(segments...)).ToRepr()
 	}
+}
+
+// Handle mesh requests
+func (nm *NodeManager) handleMesh(segments ...string) bool {
+	nodeDef := (*nm.definition).searchPath(segments)
+	scope := nodeDef.Scope()
+	if (scope == meshExclusive) || (scope == meshInclusive) {
+		return true
+	}
+	return false
 }
 
 func (nm *NodeManager) Close() error {

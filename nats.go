@@ -321,12 +321,12 @@ func (c *ExtendedNatsClient) getPath(base string, opts advOptions) (path string)
 	path = base
 	if opts.WithHost {
 		path = joinPath(c.hostname, base)
+	} else if opts.WithMesh {
+		path = joinPath(meshScope, base)
 	}
+
 	if opts.WithId {
 		path = joinPath(c.id, path)
-	}
-	if opts.WithMesh {
-		path = joinPath(meshScope, path)
 	}
 
 	return
@@ -392,7 +392,7 @@ func (c *ExtendedNatsClient) RequestMulti(base string, data interface{}, advOpts
 	_ = sub.Unsubscribe()
 	_ = sub.Drain()
 
-	return JsonObj, nil
+	return resp, nil
 }
 
 func (c *ExtendedNatsClient) Publish(base string, data interface{}, scope string, advOpts ...AdvOption) error {
