@@ -402,6 +402,9 @@ func isWildcardPath(parts ...string) bool {
 
 // Test if its a Mesh  path.
 func isMeshPath(parts ...string) bool {
+	if len(parts) == 1 {
+		parts = strings.Split(parts[0], ".")
+	}
 	return (parts[2] == "mesh")
 }
 
