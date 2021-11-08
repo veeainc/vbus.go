@@ -114,6 +114,14 @@ func ForceOwnership() defOption {
 	}
 }
 
+func Scope(scope string) defOption {
+	return func(o *DefOptions) {
+		if (scope == meshInclusive) || (scope == meshExclusive) || (scope == local) {
+			o.Scope = scope
+		}
+	}
+}
+
 // Retrieve all options to a struct
 func getDefOptions(advOpts ...defOption) DefOptions {
 	// set default options
