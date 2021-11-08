@@ -101,6 +101,7 @@ func (n *Node) checkNodeOwnership(node *Node, options ...defOption) error {
 }
 
 func (n *Node) TakeOwnership() error {
+	n.definition.scope = meshExclusive
 	return n.client.Publish(joinPath(n.GetPath(), notifOwnership), n.client.hostname, n.definition.scope, WithMesh())
 }
 
@@ -178,6 +179,7 @@ func (n *Node) checkAttributeOwnership(node *Attribute, options ...defOption) er
 }
 
 func (a *Attribute) TakeOwnership() error {
+	a.definition.scope = meshExclusive
 	return a.client.Publish(joinPath(a.GetPath(), notifOwnership), a.client.hostname, a.definition.scope, WithMesh())
 }
 
@@ -247,6 +249,7 @@ func (n *Node) checkMethodOwnership(node *Method, options ...defOption) error {
 }
 
 func (m *Method) TakeOwnership() error {
+	m.definition.scope = meshExclusive
 	return m.client.Publish(joinPath(m.GetPath(), notifOwnership), m.client.hostname, m.definition.scope, WithMesh())
 }
 
