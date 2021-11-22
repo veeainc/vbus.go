@@ -82,7 +82,8 @@ type Node struct { // implements Element
 func (n *Node) checkNodeOwnership(node *Node, options ...defOption) error {
 	opts := getDefOptions(options...)
 	// if scope is mesh:exclusive, reduce scope
-	if node.definition.scope == meshExclusive {
+	// test only "master node": the one we provide the scope information
+	if opts.Scope == meshExclusive {
 		result, err := n.client.Request(joinPath(node.GetPath(), notifGet), nil, WithMesh())
 		if err == nil {
 			_, ok := result.(JsonObj)
@@ -160,7 +161,7 @@ func (n *Node) PublishNode(node *Node) error {
 func (n *Node) checkAttributeOwnership(node *Attribute, options ...defOption) error {
 	opts := getDefOptions(options...)
 	// if scope is mesh:exclusive, reduce scope
-	if node.definition.scope == meshExclusive {
+	if opts.Scope == meshExclusive {
 		result, err := n.client.Request(joinPath(node.GetPath(), notifGet), nil, WithMesh())
 		if err == nil {
 			_, ok := result.(JsonObj)
@@ -230,7 +231,7 @@ func (n *Node) PublishAttribute(node *Attribute) error {
 func (n *Node) checkMethodOwnership(node *Method, options ...defOption) error {
 	opts := getDefOptions(options...)
 	// if scope is mesh:exclusive, reduce scope
-	if node.definition.scope == meshExclusive {
+	if opts.Scope == meshExclusive {
 		result, err := n.client.Request(joinPath(node.GetPath(), notifGet), nil, WithMesh())
 		if err == nil {
 			_, ok := result.(JsonObj)
@@ -651,9 +652,11 @@ func (nm *NodeManager) handleEvent(data interface{}, event string, segments ...s
 // Handle mesh requests
 func (nm *NodeManager) handleMesh(segments ...string) bool {
 	nodeDef := (*nm.definition).searchPath(segments)
-	scope := nodeDef.Scope()
-	if (scope == meshExclusive) || (scope == meshInclusive) {
-		return true
+	if nodeDef != nil {
+		scope := nodeDef.Scope()
+		if (scope == meshExclusive) || (scope == meshInclusive) {
+			return true
+		}
 	}
 	return false
 }

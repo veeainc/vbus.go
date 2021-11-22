@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Jeffail/gabs/v2"
 	"github.com/sirupsen/logrus"
 
 	"github.com/nats-io/nats.go"
@@ -354,28 +355,29 @@ func (c *ExtendedNatsClient) Request(base string, data interface{}, advOpts ...A
 	return fromVbus(msg.Data)
 }
 
-func (c *ExtendedNatsClient) RequestMulti(base string, data interface{}, advOpts ...AdvOption) (JsonObj, error) {
-	var resp JsonObj
+func (c *ExtendedNatsClient) RequestMulti(base string, data interface{}, advOpts ...AdvOption) (interface{}, error) {
 
 	opts := getAdvOptions(advOpts...)
 	natsPath := c.getPath(base, opts)
 
 	inbox := c.client.NewRespInbox()
 
+	jsonResponses := gabs.New()
+
 	sub, err := c.client.Subscribe(inbox, func(msg *nats.Msg) {
-		data, err := fromVbus(msg.Data)
+		//data, err := fromVbus(msg.Data)
+		jsonData, err := gabs.ParseJSON(msg.Data)
 		if err != nil {
 			_nodesLog.WithFields(LF{"path": msg.Subject}).Warn("received invalid node")
 			return // skip
 		}
 
-		o, ok := data.(JsonObj)
-		if !ok {
-			_nodesLog.Warn("received data is not a json object")
+		err = jsonResponses.Merge(jsonData)
+
+		if err != nil {
+			_nodesLog.Warn("received data couldn't be merged")
 			return // skip
 		}
-
-		resp = mergeJsonObjs(resp, o)
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot subscribe to inbox")
@@ -392,7 +394,7 @@ func (c *ExtendedNatsClient) RequestMulti(base string, data interface{}, advOpts
 	_ = sub.Unsubscribe()
 	_ = sub.Drain()
 
-	return resp, nil
+	return fromVbus(jsonResponses.Bytes())
 }
 
 func (c *ExtendedNatsClient) Publish(base string, data interface{}, scope string, advOpts ...AdvOption) error {
