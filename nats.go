@@ -9,6 +9,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Jeffail/gabs/v2"
@@ -31,14 +32,16 @@ const (
 var _natsLog = getNamedLogger()
 
 type ExtendedNatsClient struct {
-	isvh           bool              // true if running in a veeahub
-	hostname       string            // client hostname
-	remoteHostname string            // remote client server hostname
-	id             string            // app identifier
-	env            map[string]string // environment variables
-	rootFolder     string            // config folder root
-	client         *nats.Conn        // client handle
-	networkIp      string            // public network ip, populated during mdns discovery
+	isvh           bool                 // true if running in a veeahub
+	hostname       string               // client hostname
+	remoteHostname string               // remote client server hostname
+	id             string               // app identifier
+	env            map[string]string    // environment variables
+	rootFolder     string               // config folder root
+	client         *nats.Conn           // client handle
+	networkIp      string               // public network ip, populated during mdns discovery
+	memReq         map[string]time.Time // store all request receive
+	memReqMutex    sync.RWMutex
 }
 
 // A Nats callback, that take data and path segment
@@ -110,6 +113,8 @@ func NewExtendedNatsClient(appDomain, appId string) *ExtendedNatsClient {
 		remoteHostname: hostname,
 		id:             fmt.Sprintf("%s.%s", appDomain, appId),
 		env:            readEnvVar(),
+		memReq:         make(map[string]time.Time),
+		memReqMutex:    sync.RWMutex{},
 		client:         nil,
 	}
 
@@ -372,7 +377,23 @@ func (c *ExtendedNatsClient) RequestMulti(base string, data interface{}, advOpts
 			return // skip
 		}
 
-		err = jsonResponses.Merge(jsonData)
+		err = jsonResponses.MergeFn(jsonData, func(dest, source interface{}) interface{} {
+			destArr, destIsArray := dest.([]interface{})
+			sourceArr, sourceIsArray := source.([]interface{})
+			if destIsArray {
+				if sourceIsArray {
+					return append(destArr, sourceArr...)
+				}
+				return append(destArr, source)
+			}
+			if sourceIsArray {
+				return append(append([]interface{}{}, dest), sourceArr...)
+			}
+			if dest == source {
+				return source
+			}
+			return []interface{}{dest, source}
+		})
 
 		if err != nil {
 			_nodesLog.Warn("received data couldn't be merged")
@@ -393,6 +414,11 @@ func (c *ExtendedNatsClient) RequestMulti(base string, data interface{}, advOpts
 
 	_ = sub.Unsubscribe()
 	_ = sub.Drain()
+
+	if jsonResponses.String() == "{}" {
+		// empty answer
+		return nil, errors.Wrap(err, "no answer")
+	}
 
 	return fromVbus(jsonResponses.Bytes())
 }
@@ -426,6 +452,10 @@ func (c *ExtendedNatsClient) Subscribe(base string, cb NatsCallback, advOpts ...
 
 	return c.client.Subscribe(natsPath, func(msg *nats.Msg) {
 		go func(cb NatsCallback, r *regexp.Regexp, msg *nats.Msg) {
+			c.memReqMutex.Lock()
+			c.memReq[msg.Subject] = time.Now()
+			c.memReqMutex.Unlock()
+
 			m := r.FindStringSubmatch(msg.Subject)
 			// Parse data
 			data, err := fromVbus(msg.Data)
@@ -441,7 +471,7 @@ func (c *ExtendedNatsClient) Subscribe(base string, cb NatsCallback, advOpts ...
 			}
 
 			// if there is a reply subject, use it to send response
-			if isStrNotEmpty(msg.Reply) {
+			if isStrNotEmpty(msg.Reply) && (res != nil) {
 				err = c.client.Publish(msg.Reply, toVbus(res))
 				if err != nil {
 					_natsLog.WithField("error", err).Warn("error while sending response")
@@ -450,6 +480,16 @@ func (c *ExtendedNatsClient) Subscribe(base string, cb NatsCallback, advOpts ...
 			}
 		}(cb, r, msg)
 	})
+}
+
+func (c *ExtendedNatsClient) GetLastRequestTime(base string, advOpts ...AdvOption) time.Time {
+	opts := getAdvOptions(advOpts...)
+	natsPath := c.getPath(base, opts)
+	c.memReqMutex.RLock()
+	ret := c.memReq[natsPath]
+	c.memReqMutex.RUnlock()
+	_natsLog.Info("last request " + natsPath + " : " + ret.String())
+	return ret
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

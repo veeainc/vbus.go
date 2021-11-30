@@ -30,6 +30,8 @@ const (
 
 var _nodesLog = getNamedLogger()
 
+const randTimeMax = 10
+
 var (
 	ErrOwnership = errors.New("MeshExclusive Ownership already taken")
 )
@@ -79,22 +81,49 @@ type Node struct { // implements Element
 }
 
 // Check remote node ownership
-func (n *Node) checkNodeOwnership(node *Node, options ...defOption) error {
+func (n *Node) checkOwnership(path string, scope *string, ownershipCb func() error, options ...defOption) error {
 	opts := getDefOptions(options...)
 	// if scope is mesh:exclusive, reduce scope
 	// test only "master node": the one we provide the scope information
 	if opts.Scope == meshExclusive {
-		result, err := n.client.Request(joinPath(node.GetPath(), notifGet), nil, WithMesh())
+		// 1> watch any parallel request
+		countRequest := 0
+		sub, _ := n.client.Subscribe(joinPath(path, notifGet), func(data interface{}, segments []string) interface{} {
+			countRequest++
+			return nil
+		}, WithMesh())
+		// 2> check whether one was already done lately
+		concurrent := n.client.GetLastRequestTime(joinPath(path, notifGet), WithMesh())
+		// 3> request one was already done lately
+		result, err := n.client.RequestMulti(joinPath(path, notifGet), nil, WithMesh())
+
+		// 1< parallel request made?
+		sub.Unsubscribe()
+		if countRequest > 1 {
+			_nodesLog.Warn(path + " requested in parallel -> reduce scope to local")
+			*scope = local
+			return ErrOwnership
+		}
+
+		// 2< request was already done lately
+		concurrent = concurrent.Add(10 * time.Minute)
+		if concurrent.After(time.Now()) {
+			_nodesLog.Warn(path + " already requested -> reduce scope to local")
+			*scope = local
+			return ErrOwnership
+		}
+
+		// 3< anny previous request
 		if err == nil {
 			_, ok := result.(JsonObj)
 			if ok == true {
 				if opts.ForceOwnership == false {
-					_nodesLog.Warn(node.GetPath() + " already exist -> reduce scope to local")
-					node.definition.scope = local
+					_nodesLog.Warn(path + " already exist -> reduce scope to local")
+					*scope = local
 					return ErrOwnership
 				}
-				_nodesLog.Warn(node.GetPath() + " already exist -> force ownership")
-				return node.TakeOwnership()
+				_nodesLog.Warn(path + " already exist -> force ownership")
+				return ownershipCb()
 			}
 		}
 	}
@@ -102,7 +131,7 @@ func (n *Node) checkNodeOwnership(node *Node, options ...defOption) error {
 }
 
 func (n *Node) TakeOwnership() error {
-	n.definition.scope = meshExclusive
+	n.definition.SetScope(meshExclusive)
 	return n.client.Publish(joinPath(n.GetPath(), notifOwnership), n.client.hostname, n.definition.scope, WithMesh())
 }
 
@@ -124,6 +153,10 @@ func (n *Node) Definition() *NodeDef {
 	return n.definition
 }
 
+func (n *Node) Scope() string {
+	return n.definition.GetScope()
+}
+
 // Add a child node and notify Vbus
 // Returns: a new node
 func (n *Node) AddNode(uuid string, rawNode RawNode, options ...defOption) (*Node, error) {
@@ -140,7 +173,7 @@ func (n *Node) AddNode(uuid string, rawNode RawNode, options ...defOption) (*Nod
 func (n *Node) CreateNode(uuid string, rawNode RawNode, options ...defOption) (*Node, error) {
 	def := NewNodeDef(n, rawNode, options...) // create the definition
 	node := NewNode(n.client, uuid, def, n)   // create the connected node
-	err := n.checkNodeOwnership(node, options...)
+	err := n.checkOwnership(node.GetPath(), &node.definition.scope, node.TakeOwnership, options...)
 	n.definition.AddChild(uuid, def) // add it
 	return node, err
 }
@@ -157,30 +190,8 @@ func (n *Node) PublishNode(node *Node) error {
 	return nil
 }
 
-// Check remote attribute ownership
-func (n *Node) checkAttributeOwnership(node *Attribute, options ...defOption) error {
-	opts := getDefOptions(options...)
-	// if scope is mesh:exclusive, reduce scope
-	if opts.Scope == meshExclusive {
-		result, err := n.client.Request(joinPath(node.GetPath(), notifGet), nil, WithMesh())
-		if err == nil {
-			_, ok := result.(JsonObj)
-			if ok == true {
-				if opts.ForceOwnership == false {
-					_nodesLog.Warn(node.GetPath() + " already exist -> reduce scope to local")
-					node.definition.scope = local
-					return ErrOwnership
-				}
-				_nodesLog.Warn(node.GetPath() + " already exist -> force ownership")
-				return node.TakeOwnership()
-			}
-		}
-	}
-	return nil
-}
-
 func (a *Attribute) TakeOwnership() error {
-	a.definition.scope = meshExclusive
+	a.definition.SetScope(meshExclusive)
 	return a.client.Publish(joinPath(a.GetPath(), notifOwnership), a.client.hostname, a.definition.scope, WithMesh())
 }
 
@@ -199,7 +210,7 @@ func (n *Node) AddAttribute(uuid string, value interface{}, options ...defOption
 func (n *Node) CreateAttribute(uuid string, value interface{}, options ...defOption) (*Attribute, error) {
 	def := NewAttributeDef(n, uuid, value, options...) // create the definition
 	node := NewAttribute(n.client, uuid, def, n)       // create the connected node
-	err := n.checkAttributeOwnership(node)
+	err := n.checkOwnership(node.GetPath(), &node.definition.scope, node.TakeOwnership, options...)
 	n.definition.AddChild(uuid, def) // add it
 	return node, err
 }
@@ -210,7 +221,7 @@ func (n *Node) CreateAttribute(uuid string, value interface{}, options ...defOpt
 func (n *Node) CreateAttributeWithSchema(uuid string, value interface{}, schema map[string]interface{}, options ...defOption) (*Attribute, error) {
 	def := NewAttributeDefWithSchema(n, uuid, value, schema, options...) // create the definition
 	node := NewAttribute(n.client, uuid, def, n)                         // create the connected node
-	err := n.checkAttributeOwnership(node)
+	err := n.checkOwnership(node.GetPath(), &node.definition.scope, node.TakeOwnership, options...)
 	n.definition.AddChild(uuid, def) // add it
 	return node, err
 }
@@ -227,30 +238,8 @@ func (n *Node) PublishAttribute(node *Attribute) error {
 	return nil
 }
 
-// Check remote method ownership
-func (n *Node) checkMethodOwnership(node *Method, options ...defOption) error {
-	opts := getDefOptions(options...)
-	// if scope is mesh:exclusive, reduce scope
-	if opts.Scope == meshExclusive {
-		result, err := n.client.Request(joinPath(node.GetPath(), notifGet), nil, WithMesh())
-		if err == nil {
-			_, ok := result.(JsonObj)
-			if ok == true {
-				if opts.ForceOwnership == false {
-					_nodesLog.Warn(node.GetPath() + " already exist -> reduce scope to local")
-					node.definition.scope = local
-					return ErrOwnership
-				}
-				_nodesLog.Warn(node.GetPath() + " already exist -> force ownership")
-				return node.TakeOwnership()
-			}
-		}
-	}
-	return nil
-}
-
 func (m *Method) TakeOwnership() error {
-	m.definition.scope = meshExclusive
+	m.definition.SetScope(meshExclusive)
 	return m.client.Publish(joinPath(m.GetPath(), notifOwnership), m.client.hostname, m.definition.scope, WithMesh())
 }
 
@@ -272,7 +261,7 @@ func (n *Node) CreateMethod(uuid string, method MethodDefCallback, options ...de
 	// send the node definition on Vbus
 	def := NewMethodDef(n, method, options...) // create the definition
 	node := NewMethod(n.client, uuid, def, n)  // create the connected node
-	err := n.checkMethodOwnership(node)
+	err := n.checkOwnership(node.GetPath(), &node.definition.scope, node.TakeOwnership, options...)
 	n.definition.AddChild(uuid, def) // add it
 	return node, err
 }
@@ -284,7 +273,7 @@ func (n *Node) CreateMethodWithSchema(uuid string, paramsSchema map[string]inter
 	// send the node definition on Vbus
 	def := NewMethodDefWithSchema(n, method, paramsSchema, returnsSchema, options...) // create the definition
 	node := NewMethod(n.client, uuid, def, n)                                         // create the connected node
-	err := n.checkMethodOwnership(node)
+	err := n.checkOwnership(node.GetPath(), &node.definition.scope, node.TakeOwnership, options...)
 	n.definition.AddChild(uuid, def) // add it
 	return node, err
 }
@@ -329,7 +318,7 @@ func (n *Node) RemoveElement(uuid string) error {
 
 	// send the node definition on Vbus
 	packet := JsonObj{uuid: def.ToRepr()}
-	if err := n.client.Publish(joinPath(n.GetPath(), notifRemoved), packet, def.Scope()); err != nil {
+	if err := n.client.Publish(joinPath(n.GetPath(), notifRemoved), packet, def.GetScope()); err != nil {
 		return errors.Wrap(err, "element deleted but cannot send vbus notification")
 	}
 	return nil // success
@@ -433,7 +422,7 @@ type ModuleInfo struct {
 // Creates a new NodeManager. Don't forget to defer Close()
 func NewNodeManager(nats *ExtendedNatsClient, opts natsClientOptions) *NodeManager {
 	return &NodeManager{
-		Node:     NewNode(nats, "", NewNodeDef(nil, RawNode{}), nil),
+		Node:     NewNode(nats, "", NewNodeDef(nil, RawNode{}, MeshInclusive()), nil),
 		opts:     opts,
 		urisNode: nil,
 	}
@@ -552,7 +541,7 @@ func (nm *NodeManager) Initialize() error {
 		if nm.handleMesh(parts...) == false {
 			return nil // element not mesh visibility
 		}
-		return nm.handleEvent(data, event, parts...)
+		return nm.handleEvent(data, event, "mesh", parts...)
 	}, WithMesh())
 	if err != nil {
 		return errors.Wrap(err, "cannot subscribe to all")
@@ -569,7 +558,7 @@ func (nm *NodeManager) Initialize() error {
 		}
 
 		event, parts := parts[len(parts)-1], parts[:len(parts)-1] // pop event from parts
-		return nm.handleEvent(data, event, parts...)
+		return nm.handleEvent(data, event, "", parts...)
 	})
 	if err != nil {
 		return errors.Wrap(err, "cannot subscribe to all")
@@ -612,7 +601,7 @@ func (nm *NodeManager) getModuleInfo() ModuleInfo {
 }
 
 // Handle incoming get requests.
-func (nm *NodeManager) handleEvent(data interface{}, event string, segments ...string) interface{} {
+func (nm *NodeManager) handleEvent(data interface{}, event string, scope string, segments ...string) interface{} {
 	nodeDef := (*nm.definition).searchPath(segments)
 	if nodeDef != nil { // if found
 		var ret interface{}
@@ -620,7 +609,7 @@ func (nm *NodeManager) handleEvent(data interface{}, event string, segments ...s
 
 		switch event {
 		case notifGet:
-			ret, err = nodeDef.handleGet(data, segments)
+			ret, err = nodeDef.handleGet(data, segments, scope)
 		case notifSetted:
 			ret, err = nodeDef.handleSet(data, segments)
 		case notifOwnership:
@@ -653,7 +642,7 @@ func (nm *NodeManager) handleEvent(data interface{}, event string, segments ...s
 func (nm *NodeManager) handleMesh(segments ...string) bool {
 	nodeDef := (*nm.definition).searchPath(segments)
 	if nodeDef != nil {
-		scope := nodeDef.Scope()
+		scope := nodeDef.GetScope()
 		if (scope == meshExclusive) || (scope == meshInclusive) {
 			return true
 		}

@@ -28,16 +28,17 @@ type IDefinition interface {
 	handleSet(data interface{}, parts []string) (interface{}, error)
 
 	// Tells how to handle a set request from Vbus.
-	handleGet(data interface{}, parts []string) (interface{}, error)
+	handleGet(data interface{}, parts []string, scope string) (interface{}, error)
 
 	// Tells how to handle a ownership request from Vbus.
 	handleOwnership(data interface{}, parts []string, hostname string) (interface{}, error)
 
 	// Get the Vbus representation.
-	ToRepr() JsonObj
+	ToRepr(scope ...string) JsonObj
 
-	// Get the node scope.
-	Scope() string
+	// manipulate the node scope.
+	GetScope() string
+	SetScope(string)
 }
 
 // Tells if a raw node is an attribute.
@@ -202,8 +203,11 @@ func (e *ErrorDefinition) searchPath(parts []string) IDefinition {
 	return nil
 }
 
-func (e *ErrorDefinition) Scope() string {
+func (e *ErrorDefinition) GetScope() string {
 	return local
+}
+
+func (e *ErrorDefinition) SetScope(string) {
 }
 
 func (e *ErrorDefinition) handleSet(data interface{}, parts []string) (interface{}, error) {
@@ -216,11 +220,11 @@ func (e *ErrorDefinition) handleOwnership(data interface{}, parts []string, host
 	return nil, nil
 }
 
-func (e *ErrorDefinition) handleGet(data interface{}, parts []string) (interface{}, error) {
+func (e *ErrorDefinition) handleGet(data interface{}, parts []string, scope string) (interface{}, error) {
 	return e.ToRepr(), nil
 }
 
-func (e *ErrorDefinition) ToRepr() JsonObj {
+func (e *ErrorDefinition) ToRepr(scope ...string) JsonObj {
 	if e.detail == nil {
 		return map[string]interface{}{
 			"code":    e.code,
@@ -384,14 +388,18 @@ func (md *MethodDef) searchPath(parts []string) IDefinition {
 	return nil
 }
 
-func (md *MethodDef) Scope() string {
+func (md *MethodDef) GetScope() string {
 	return md.scope
+}
+
+func (md *MethodDef) SetScope(scope string) {
+	md.scope = scope
 }
 
 func (md *MethodDef) handleOwnership(args interface{}, parts []string, hostname string) (interface{}, error) {
 
 	if args != nil {
-		if args.(string) != hostname {
+		if args.(string) == hostname {
 			return nil, nil
 		}
 		md.scope = local
@@ -415,11 +423,11 @@ func (md *MethodDef) handleSet(args interface{}, parts []string) (interface{}, e
 	}
 }
 
-func (md *MethodDef) handleGet(data interface{}, parts []string) (interface{}, error) {
+func (md *MethodDef) handleGet(data interface{}, parts []string, scope string) (interface{}, error) {
 	return md.ToRepr(), nil
 }
 
-func (md *MethodDef) ToRepr() JsonObj {
+func (md *MethodDef) ToRepr(scope ...string) JsonObj {
 	return map[string]interface{}{
 		"params": map[string]interface{}{
 			"schema": md.paramsSchema,
@@ -516,14 +524,18 @@ func (a *AttributeDef) searchPath(parts []string) IDefinition {
 	return nil
 }
 
-func (a *AttributeDef) Scope() string {
+func (a *AttributeDef) GetScope() string {
 	return a.scope
+}
+
+func (a *AttributeDef) SetScope(scope string) {
+	a.scope = scope
 }
 
 func (a *AttributeDef) handleOwnership(args interface{}, parts []string, hostname string) (interface{}, error) {
 
 	if args != nil {
-		if args.(string) != hostname {
+		if args.(string) == hostname {
 			return nil, nil
 		}
 		a.scope = local
@@ -563,7 +575,7 @@ func (a *AttributeDef) handleSet(data interface{}, parts []string) (interface{},
 	return nil, nil
 }
 
-func (a *AttributeDef) handleGet(data interface{}, parts []string) (interface{}, error) {
+func (a *AttributeDef) handleGet(data interface{}, parts []string, scope string) (interface{}, error) {
 	if lastString(parts) == "value" { // request on value
 		if a.onGet != nil {
 			return invokeFunc(a.onGet, data, parts)
@@ -576,7 +588,7 @@ func (a *AttributeDef) handleGet(data interface{}, parts []string) (interface{},
 	}
 }
 
-func (a *AttributeDef) ToRepr() JsonObj {
+func (a *AttributeDef) ToRepr(scope ...string) JsonObj {
 	if a.value == nil {
 		return map[string]interface{}{
 			"schema": a.schema,
@@ -605,6 +617,17 @@ type NodeDef struct { // implements IDefinition
 	scope              string
 }
 
+func addHost(parent *Node, rawNode RawNode, scope string) RawNode {
+	if (scope != "") && (parent != nil) {
+		if rawNode != nil {
+			rawNode["host"] = parent.client.hostname
+		} else {
+			return RawNode{"host": parent.client.hostname}
+		}
+	}
+	return rawNode
+}
+
 func inheritScope(parent *Node, scope string) string {
 	if scope != "" {
 		return scope
@@ -617,9 +640,10 @@ func inheritScope(parent *Node, scope string) string {
 
 func NewNodeDef(parent *Node, rawNode RawNode, option ...defOption) *NodeDef {
 	opts := getDefOptions(option...)
+	rawNode = addHost(parent, rawNode, opts.Scope)
 	scope := inheritScope(parent, opts.Scope)
 	return &NodeDef{
-		structure:          initializeStructure(rawNode),
+		structure:          initializeStructure(rawNode, scope),
 		onSet:              opts.OnSet,
 		scope:              scope,
 		onOwnershipChanged: opts.OnOwnershipChanged,
@@ -635,14 +659,23 @@ func (nd *NodeDef) searchPath(parts []string) IDefinition {
 	return nil
 }
 
-func (nd *NodeDef) Scope() string {
+func (nd *NodeDef) GetScope() string {
 	return nd.scope
+}
+
+func (nd *NodeDef) SetScope(scope string) {
+	nd.scope = scope
+
+	// modify also scope to all child node
+	for _, v := range nd.structure {
+		v.SetScope(scope)
+	}
 }
 
 func (nd *NodeDef) handleOwnership(args interface{}, parts []string, hostname string) (interface{}, error) {
 
 	if args != nil {
-		if args.(string) != hostname {
+		if args.(string) == hostname {
 			return nil, nil
 		}
 		nd.scope = local
@@ -663,30 +696,41 @@ func (nd *NodeDef) handleSet(data interface{}, parts []string) (interface{}, err
 	return nil, nil
 }
 
-func (nd *NodeDef) handleGet(data interface{}, parts []string) (interface{}, error) {
+func (nd *NodeDef) handleGet(data interface{}, parts []string, scope string) (interface{}, error) {
+	if scope == "mesh" {
+		_defLog.WithFields(LF{"node": parts}).Debug("mesh visibility only")
+		return nd.ToRepr("mesh"), nil
+	}
 	return nd.ToRepr(), nil
 }
 
-func (nd *NodeDef) ToRepr() JsonObj {
+func (nd *NodeDef) ToRepr(scope ...string) JsonObj {
 	repr := JsonObj{}
 
 	for k, v := range nd.structure {
-		repr[k] = v.ToRepr()
+		if len(scope) > 0 && scope[0] == "mesh" {
+			// test mesh scope
+			if v.GetScope() == local {
+				_defLog.WithFields(LF{"node": k}).Info("local, filtered out")
+				continue
+			}
+		}
+		repr[k] = v.ToRepr(scope...)
 	}
 
 	return repr
 }
 
-func initializeStructure(rawNode RawNode) NodeStruct {
+func initializeStructure(rawNode RawNode, scope string) NodeStruct {
 	var structure = NodeStruct{}
 
 	for k, v := range rawNode {
 		if isMap(v) { // if its a map
-			structure[k] = NewNodeDef(nil, v.(RawNode))
+			structure[k] = NewNodeDef(nil, v.(RawNode), Scope(scope))
 		} else if d, ok := v.(IDefinition); ok { // if its already a definition
 			structure[k] = d
 		} else {
-			structure[k] = NewAttributeDef(nil, k, v)
+			structure[k] = NewAttributeDef(nil, k, v, Scope(scope))
 		}
 	}
 	return structure

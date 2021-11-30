@@ -24,6 +24,8 @@ type IProxy interface {
 	String() string
 }
 
+const defaultRequestTime = 2
+
 // Subscription callback type.
 type ProxySubCallback = func(proxy *UnknownProxy, segments ...string)
 
@@ -306,7 +308,7 @@ func (np *NodeProxy) GetNode(parts ...string) (*NodeProxy, error) {
 			path := joinPath(prepend(np.GetPath(), parts)...)
 			// load from Vbus
 			if isMeshPath(path) {
-				resp, err := np.client.RequestMulti(joinPath(path, notifGet), nil, WithoutHost(), WithoutId())
+				resp, err := np.client.RequestMulti(joinPath(path, notifGet), nil, WithoutHost(), WithoutId(), Timeout(defaultRequestTime*time.Second))
 				if err != nil {
 					return nil, errors.Wrap(err, "cannot retrieve mesh remote node")
 				}
@@ -318,7 +320,7 @@ func (np *NodeProxy) GetNode(parts ...string) (*NodeProxy, error) {
 				return nil, errors.New("Retrieved value on Vbus is not a valid json node")
 			}
 
-			resp, err := np.client.Request(joinPath(path, notifGet), nil, WithoutHost(), WithoutId())
+			resp, err := np.client.Request(joinPath(path, notifGet), nil, WithoutHost(), WithoutId(), Timeout(defaultRequestTime*time.Second))
 			if err != nil {
 				return nil, errors.Wrap(err, "cannot retrieve remote node")
 			}
@@ -344,7 +346,7 @@ func (np *NodeProxy) GetMethod(parts ...string) (*MethodProxy, error) {
 			path := joinPath(prepend(np.GetPath(), parts)...)
 			// load from Vbus
 			if isMeshPath(path) {
-				resp, err := np.client.RequestMulti(joinPath(path, notifGet), nil, WithoutHost(), WithoutId())
+				resp, err := np.client.RequestMulti(joinPath(path, notifGet), nil, WithoutHost(), WithoutId(), Timeout(defaultRequestTime*time.Second))
 				if err != nil {
 					return nil, errors.Wrap(err, "cannot retrieve mesh remote node")
 				}
@@ -356,7 +358,7 @@ func (np *NodeProxy) GetMethod(parts ...string) (*MethodProxy, error) {
 				return nil, errors.New("Retrieved value on Vbus is not a valid json node")
 			}
 
-			resp, err := np.client.Request(joinPath(path, notifGet), nil, WithoutHost(), WithoutId(), Timeout(2*time.Second))
+			resp, err := np.client.Request(joinPath(path, notifGet), nil, WithoutHost(), WithoutId(), Timeout(defaultRequestTime*time.Second))
 			if err != nil {
 				return nil, errors.Wrap(err, "cannot retrieve remote method")
 			}
@@ -381,7 +383,7 @@ func (np *NodeProxy) GetAttribute(parts ...string) (*AttributeProxy, error) {
 			path := joinPath(prepend(np.GetPath(), parts)...)
 			// load from Vbus
 			if isMeshPath(path) {
-				resp, err := np.client.RequestMulti(joinPath(path, notifGet), nil, WithoutHost(), WithoutId())
+				resp, err := np.client.RequestMulti(joinPath(path, notifGet), nil, WithoutHost(), WithoutId(), Timeout(defaultRequestTime*time.Second))
 				if err != nil {
 					return nil, errors.Wrap(err, "cannot retrieve mesh remote node")
 				}
@@ -393,7 +395,7 @@ func (np *NodeProxy) GetAttribute(parts ...string) (*AttributeProxy, error) {
 				return nil, errors.New("Retrieved value on Vbus is not a valid json node")
 			}
 
-			resp, err := np.client.Request(joinPath(path, notifGet), nil, WithoutHost(), WithoutId(), Timeout(2*time.Second))
+			resp, err := np.client.Request(joinPath(path, notifGet), nil, WithoutHost(), WithoutId(), Timeout(defaultRequestTime*time.Second))
 			if err != nil {
 				return nil, errors.Wrap(err, "cannot retrieve remote attribute")
 			}
@@ -415,16 +417,30 @@ func (np *NodeProxy) GetElementWithTimeout(timeout time.Duration, parts ...strin
 		if rawElementDef != nil {
 			return NewUnknownProxy(np.client, joinPath(prepend(np.GetPath(), parts)...), rawElementDef), nil
 		} else {
+			path := joinPath(prepend(np.GetPath(), parts)...)
 			// load from Vbus
-			resp, err := np.client.Request(joinPath(append(parts, notifGet)...), nil, WithoutHost(), WithoutId(), Timeout(timeout))
+			if isMeshPath(path) {
+				resp, err := np.client.RequestMulti(joinPath(path, notifGet), nil, WithoutHost(), WithoutId(), Timeout(timeout))
+				if err != nil {
+					return nil, errors.Wrap(err, "cannot retrieve mesh remote node")
+				}
+				// check if its a json object
+				if rawElementDef, ok := resp.(JsonObj); ok {
+					return NewUnknownProxy(np.client, path, rawElementDef), nil
+				}
+
+				return nil, errors.New("Retrieved value on Vbus is not a valid json node")
+			}
+
+			resp, err := np.client.Request(joinPath(path, notifGet), nil, WithoutHost(), WithoutId(), Timeout(timeout))
 			if err != nil {
 				return nil, errors.Wrap(err, "cannot retrieve remote attribute")
 			}
 			// check if its a json object
 			if rawElementDef, ok := resp.(JsonObj); ok {
-				return NewUnknownProxy(np.client, joinPath(prepend(np.GetPath(), parts)...), rawElementDef), nil
+				return NewUnknownProxy(np.client, path, rawElementDef), nil
 			}
-			return nil, errors.New("Retrieved value on Vbus is not a valid json element")
+			return nil, errors.New("Retrieved value on Vbus is not a valid json node")
 		}
 	}
 }
