@@ -19,6 +19,7 @@ import (
 )
 
 const (
+	envUserConfig = "USER_CONFIG"
 	envHome       = "HOME"
 	envVbusPath   = "VBUS_PATH"
 	envVbusUrl    = "VBUS_URL"
@@ -47,7 +48,12 @@ type natsConnectOptions struct {
 	HubId      string
 	Login      string
 	Password   string
+	Pwd        string // anonymous password
 	Permission []string
+}
+
+type UserConfigStruct struct {
+	Password string `json:"vBusPwd"`
 }
 
 // Check if option contains user information.
@@ -78,6 +84,13 @@ func WithUser(login, pwd string) natsConnectOption {
 	return func(o *natsConnectOptions) {
 		o.Login = login
 		o.Password = pwd
+	}
+}
+
+// Add vBus password
+func WithPwd(pwd string) natsConnectOption {
+	return func(o *natsConnectOptions) {
+		o.Pwd = pwd
 	}
 }
 
@@ -123,9 +136,10 @@ func NewExtendedNatsClient(appDomain, appId string) *ExtendedNatsClient {
 
 func readEnvVar() map[string]string {
 	return map[string]string{
-		envHome:     os.Getenv(envHome),
-		envVbusPath: os.Getenv(envVbusPath),
-		envVbusUrl:  os.Getenv(envVbusUrl),
+		envUserConfig: os.Getenv(envUserConfig),
+		envHome:       os.Getenv(envHome),
+		envVbusPath:   os.Getenv(envVbusPath),
+		envVbusUrl:    os.Getenv(envVbusUrl),
 	}
 }
 
@@ -148,6 +162,28 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 		opt(&opts)
 	}
 
+	if opts.Pwd == "" {
+		opts.Pwd = "anonymous"
+		userConfig := "/usr/local/config/defaults/user-config.json"
+		if c.env[envUserConfig] != "" {
+			userConfig = c.env[envUserConfig]
+		}
+		_natsLog.Debug("user config file: " + userConfig)
+		file, e := ioutil.ReadFile(userConfig)
+		if e != nil {
+			_natsLog.Debug("no existing user config file")
+		} else {
+			var userConfigS UserConfigStruct
+			err := json.Unmarshal(file, &userConfigS)
+			if err != nil {
+				_natsLog.Debug("cannot parse user config file")
+			} else {
+				_natsLog.Debug("user config password found")
+				opts.Pwd = userConfigS.Password
+			}
+		}
+	}
+
 	if opts.HubId != "" {
 		c.remoteHostname = sanitizeNatsSegment(opts.HubId)
 	} else {
@@ -155,7 +191,7 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 	}
 
 	if opts.hasUser() {
-		url, newHost, err := c.findVbusUrl(&configuration{})
+		url, newHost, err := c.findVbusUrl(&configuration{}, opts.Pwd)
 		if err != nil {
 			return errors.Wrap(err, "cannot find vbus url")
 		}
@@ -184,7 +220,7 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 			return errors.Wrap(err, "cannot retrieve configuration")
 		}
 
-		url, newHost, err := c.findVbusUrl(config)
+		url, newHost, err := c.findVbusUrl(config, opts.Pwd)
 		if err != nil {
 			return errors.Wrap(err, "cannot find vbus url")
 		}
@@ -229,7 +265,7 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 		if err != nil {
 			_natsLog.Debug("unable to connect with user in config file, adding it")
 
-			err = c.publishUser(url, config.Client)
+			err = c.publishUser(url, opts.Pwd, config.Client)
 			if err != nil {
 				return errors.Wrap(err, "cannot create user")
 			}
@@ -436,8 +472,8 @@ func (c *ExtendedNatsClient) AskPermission(permission string) (bool, error) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Publish on Vbus the user described in configuration.
-func (c *ExtendedNatsClient) publishUser(url string, config ClientConfig) error {
-	conn, err := nats.Connect(url, nats.UserInfo(anonymousUser, anonymousUser))
+func (c *ExtendedNatsClient) publishUser(url, pwd string, config ClientConfig) error {
+	conn, err := nats.Connect(url, nats.UserInfo(anonymousUser, pwd))
 	if err != nil {
 		return errors.Wrap(err, "cannot connect to client server")
 	}
@@ -454,26 +490,26 @@ func (c *ExtendedNatsClient) publishUser(url string, config ClientConfig) error 
 
 // Create a new user on vbus.
 // Can be user with vBus.HubId() option.
-func (c *ExtendedNatsClient) CreateUser(userConfig ClientConfig, options ...natsConnectOption) error {
-	// retrieve options
-	opts := natsConnectOptions{}
-	for _, opt := range options {
-		opt(&opts)
-	}
+// func (c *ExtendedNatsClient) CreateUser(userConfig ClientConfig, options ...natsConnectOption) error {
+// 	// retrieve options
+// 	opts := natsConnectOptions{}
+// 	for _, opt := range options {
+// 		opt(&opts)
+// 	}
 
-	if opts.HubId != "" {
-		c.remoteHostname = sanitizeNatsSegment(opts.HubId)
-	} else {
-		c.remoteHostname = sanitizeNatsSegment(c.hostname)
-	}
+// 	if opts.HubId != "" {
+// 		c.remoteHostname = sanitizeNatsSegment(opts.HubId)
+// 	} else {
+// 		c.remoteHostname = sanitizeNatsSegment(c.hostname)
+// 	}
 
-	url, _, err := c.findVbusUrl(&configuration{}) // empty configuration
-	if err != nil {
-		return errors.Wrap(err, "cannot find vbus url")
-	}
+// 	url, _, err := c.findVbusUrl(&configuration{}) // empty configuration
+// 	if err != nil {
+// 		return errors.Wrap(err, "cannot find vbus url")
+// 	}
 
-	return c.publishUser(url, userConfig)
-}
+// 	return c.publishUser(url, userConfig)
+// }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Find server url strategies
@@ -534,7 +570,7 @@ func (c *ExtendedNatsClient) getglobalDefault(config *configuration) (url []stri
 	return url, newHost, nil
 }
 
-func (c *ExtendedNatsClient) findVbusUrl(config *configuration) (serverUrl string, newHost string, e error) {
+func (c *ExtendedNatsClient) findVbusUrl(config *configuration, pwd string) (serverUrl string, newHost string, e error) {
 	findServerUrlStrategies := []func(config *configuration) (url []string, newHost string, e error){
 		c.getFromHubId,
 		c.getFromEnv,
@@ -554,7 +590,7 @@ func (c *ExtendedNatsClient) findVbusUrl(config *configuration) (serverUrl strin
 
 		urls, newHost, e = strategy(config)
 		for _, url := range urls {
-			if testVbusUrl(url) {
+			if testVbusUrl(url, pwd) {
 				_natsLog.WithFields(LF{"strategy": getFunctionName(strategy), "url": url}).Info("url found")
 				success = true
 				serverUrl = url

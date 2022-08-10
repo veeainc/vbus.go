@@ -220,11 +220,11 @@ func zeroconfSearch() (urlToTest []string, newHost string, networkIp string, e e
 }
 
 // Check if the provided Vbus url is valid
-func testVbusUrl(url string) bool {
+func testVbusUrl(url, pwd string) bool {
 	if url == "" {
 		return false
 	}
-	conn, err := nats.Connect(url, nats.UserInfo(anonymousUser, anonymousUser))
+	conn, err := nats.Connect(url, nats.UserInfo(anonymousUser, pwd))
 	_helpersLog.Debug("client remote IP: " + conn.ConnectedAddr())
 	if err == nil {
 		defer conn.Close()
