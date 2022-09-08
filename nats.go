@@ -518,13 +518,13 @@ func (c *ExtendedNatsClient) publishUser(url, pwd string, config ClientConfig) e
 func (c *ExtendedNatsClient) getFromHubId(config *configuration) (url []string, newHost string, e error) {
 	if ret := net.ParseIP(c.remoteHostname); ret != nil {
 		// already an ip address
-		return []string{fmt.Sprintf("nats://%s:21400", c.remoteHostname)}, "", nil
+		return []string{fmt.Sprintf("tls://%s:21400", c.remoteHostname)}, "", nil
 	} else {
 		addr, err := net.LookupIP(c.remoteHostname) // resolve hostname
 		if err != nil {
 			return []string{}, "", errors.Wrap(err, "Cannot resolve hostname")
 		}
-		return []string{fmt.Sprintf("nats://%v:21400", addr[0])}, "", nil
+		return []string{fmt.Sprintf("tls://%v:21400", addr[0])}, "", nil
 	}
 }
 
@@ -540,7 +540,7 @@ func (c *ExtendedNatsClient) getFromEnv(config *configuration) (url []string, ne
 
 // find vbus server  - strategy 3: try default url client://hostname.service.veeamesh.local:21400
 func (c *ExtendedNatsClient) getlocalDefault(config *configuration) (url []string, newHost string, e error) {
-	url = []string{"nats://" + c.hostname + ".service.veeamesh.local:21400"}
+	url = []string{"tls://" + c.hostname + ".service.veeamesh.local:21400"}
 	addr, err := net.LookupHost(c.hostname + "-host.service.veeamesh.local")
 	if err == nil && len(addr) > 0 {
 		c.networkIp = addr[0]
@@ -559,7 +559,7 @@ func (c *ExtendedNatsClient) getFromZeroconf(config *configuration) (url []strin
 // find vbus server  - strategy 5: try global (MEN) url client://vbus.service.veeamesh.local:21400
 func (c *ExtendedNatsClient) getglobalDefault(config *configuration) (url []string, newHost string, e error) {
 	if c.isvh == false {
-		url = []string{"nats://vbus.service.veeamesh.local:21400"}
+		url = []string{"tls://vbus.service.veeamesh.local:21400"}
 		newHost = ""
 		addr, err := net.LookupHost("vbus.service.veeamesh.local")
 		if err == nil && len(addr) > 0 {
@@ -572,11 +572,11 @@ func (c *ExtendedNatsClient) getglobalDefault(config *configuration) (url []stri
 
 func (c *ExtendedNatsClient) findVbusUrl(config *configuration, pwd string) (serverUrl string, newHost string, e error) {
 	findServerUrlStrategies := []func(config *configuration) (url []string, newHost string, e error){
-		c.getFromHubId,
+		//c.getFromHubId,
 		c.getFromEnv,
 		c.getFromConfigFile,
 		c.getlocalDefault,
-		c.getFromZeroconf,
+		//c.getFromZeroconf,
 		c.getglobalDefault,
 	}
 
