@@ -1,6 +1,6 @@
 module github.com/veeainc/vbus.go
 
-go 1.13
+go 1.16
 
 require (
 	github.com/alecthomas/jsonschema v0.0.0-20200127222324-dd4542c1f589
@@ -18,7 +18,7 @@ require (
 	github.com/stretchr/testify v1.3.1-0.20190311161405-34c6fa2dc709
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2
 	github.com/xeipuuv/gojsonschema v1.2.0
-	golang.org/x/crypto v0.0.0-20200109152110-61a87790db17
+	golang.org/x/crypto v0.0.0-20200323165209-0ec3e9974c59
 	gotest.tools v2.2.0+incompatible
 	robpike.io/filter v0.0.0-20150108201509-2984852a2183
 )

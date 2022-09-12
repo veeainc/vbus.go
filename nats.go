@@ -1,6 +1,7 @@
 package vBus
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -17,6 +18,9 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/bcrypt"
 )
+
+//go:embed veea-ca.pem
+var s []byte
 
 const (
 	envUserConfig = "USER_CONFIG"
@@ -220,6 +224,8 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 			return errors.Wrap(err, "cannot retrieve configuration")
 		}
 
+		os.WriteFile(c.rootFolder+"/veea-ca.pem", s, 0644)
+
 		url, newHost, err := c.findVbusUrl(config, opts.Pwd)
 		if err != nil {
 			return errors.Wrap(err, "cannot find vbus url")
@@ -261,7 +267,8 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 		// connect with user in config file
 		c.client, err = nats.Connect(url,
 			nats.UserInfo(config.Client.User, config.Key.Private),
-			nats.Name(config.Client.User))
+			nats.Name(config.Client.User),
+			nats.RootCAs(c.rootFolder+"/veea-ca.pem"))
 		if err != nil {
 			_natsLog.Debug("unable to connect with user in config file, adding it")
 
@@ -274,7 +281,8 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 			// connect with user in config file
 			c.client, err = nats.Connect(url,
 				nats.UserInfo(config.Client.User, config.Key.Private),
-				nats.Name(config.Client.User))
+				nats.Name(config.Client.User),
+				nats.RootCAs(c.rootFolder+"/veea-ca.pem"))
 		} else {
 			time.Sleep(1000 * time.Millisecond)
 			// either we pushed the default permission with the full account publish (if)
@@ -473,7 +481,7 @@ func (c *ExtendedNatsClient) AskPermission(permission string) (bool, error) {
 
 // Publish on Vbus the user described in configuration.
 func (c *ExtendedNatsClient) publishUser(url, pwd string, config ClientConfig) error {
-	conn, err := nats.Connect(url, nats.UserInfo(anonymousUser, pwd))
+	conn, err := nats.Connect(url, nats.UserInfo(anonymousUser, pwd), nats.RootCAs(c.rootFolder+"/veea-ca.pem"))
 	if err != nil {
 		return errors.Wrap(err, "cannot connect to client server")
 	}
@@ -511,9 +519,9 @@ func (c *ExtendedNatsClient) publishUser(url, pwd string, config ClientConfig) e
 // 	return c.publishUser(url, userConfig)
 // }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Find server url strategies
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // find Vbus server - strategy 0: get from argument
 func (c *ExtendedNatsClient) getFromHubId(config *configuration) (url []string, newHost string, e error) {
 	if ret := net.ParseIP(c.remoteHostname); ret != nil {
@@ -563,7 +571,7 @@ func (c *ExtendedNatsClient) getglobalDefault(config *configuration) (url []stri
 		newHost = ""
 		addr, err := net.LookupHost("vbus.service.veeamesh.local")
 		if err == nil && len(addr) > 0 {
-			newHost = getHostnameFromvBus(url[0], addr[0])
+			newHost = getHostnameFromvBus(url[0], addr[0], c.rootFolder+"/veea-ca.pem")
 			c.networkIp = addr[0]
 		}
 	}
@@ -590,7 +598,7 @@ func (c *ExtendedNatsClient) findVbusUrl(config *configuration, pwd string) (ser
 
 		urls, newHost, e = strategy(config)
 		for _, url := range urls {
-			if testVbusUrl(url, pwd) {
+			if testVbusUrl(url, pwd, c.rootFolder+"/veea-ca.pem") {
 				_natsLog.WithFields(LF{"strategy": getFunctionName(strategy), "url": url}).Info("url found")
 				success = true
 				serverUrl = url

@@ -220,11 +220,12 @@ func zeroconfSearch() (urlToTest []string, newHost string, networkIp string, e e
 }
 
 // Check if the provided Vbus url is valid
-func testVbusUrl(url, pwd string) bool {
+func testVbusUrl(url, pwd, ca string) bool {
 	if url == "" {
 		return false
 	}
-	conn, err := nats.Connect(url, nats.UserInfo(anonymousUser, pwd))
+	conn, err := nats.Connect(url, nats.UserInfo(anonymousUser, pwd),
+		nats.RootCAs(ca))
 	_helpersLog.Debug("client remote IP: " + conn.ConnectedAddr())
 	if err == nil {
 		defer conn.Close()
@@ -235,11 +236,12 @@ func testVbusUrl(url, pwd string) bool {
 }
 
 // Get Hostname from vBus
-func getHostnameFromvBus(url string, ip string) string {
+func getHostnameFromvBus(url, ip, ca string) string {
 	if url == "" {
 		return ""
 	}
-	conn, err := nats.Connect(url, nats.UserInfo(anonymousUser, anonymousUser))
+	conn, err := nats.Connect(url, nats.UserInfo(anonymousUser, anonymousUser),
+		nats.RootCAs(ca))
 	if err == nil {
 		var info vBusInfo
 		msg, err := conn.Request(pathToInfo, []byte(ip), 10*time.Second)
