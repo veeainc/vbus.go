@@ -1,6 +1,6 @@
 module github.com/veeainc/vbus.go
 
-go 1.16
+go 1.13
 
 require (
 	github.com/alecthomas/jsonschema v0.0.0-20200127222324-dd4542c1f589
