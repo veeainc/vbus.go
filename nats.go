@@ -237,7 +237,7 @@ func (c *ExtendedNatsClient) Connect(options ...natsConnectOption) error {
 			return errors.Wrap(err, "cannot retrieve configuration")
 		}
 
-		os.WriteFile(c.rootFolder+"/veea-ca.pem", s, 0644)
+		ioutil.WriteFile(c.rootFolder+"/veea-ca.pem", s, 0644)
 
 		url, newHost, err := c.findVbusUrl(config, opts.Pwd)
 		if err != nil {
